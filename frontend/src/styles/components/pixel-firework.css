@@ -1,0 +1,91 @@
+/* Pixel-Firework: retro Konfetti-Effekt für Win-Animationen / Spielerlisten. */
+.pf-root {
+  position: relative;
+  width: 64px;
+  height: 40px;
+}
+
+/* Einzelne Pixel-Sprites, die radial vom Zentrum wegfliegen. */
+.pf-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #fff26e;
+  image-rendering: pixelated;
+  border: 2px solid #000;
+  box-shadow: 0 0 0 2px #000 inset;
+  opacity: 0;
+}
+
+/* Zentrales "Explosions"-Pixel skaliert kurz auf. */
+.pf-center {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.4);
+  animation: pf-pop 160ms steps(2, end) forwards;
+}
+
+/* Acht Flugbahnen, die unterschiedliche Richtungen abdecken. */
+.pf-a { left: 50%; top: 50%; animation: pf-fly-a 700ms steps(5, end) 60ms forwards;  }
+.pf-b { left: 50%; top: 50%; animation: pf-fly-b 720ms steps(5, end) 80ms forwards;  }
+.pf-c { left: 50%; top: 50%; animation: pf-fly-c 740ms steps(5, end) 100ms forwards; }
+.pf-d { left: 50%; top: 50%; animation: pf-fly-d 760ms steps(5, end) 120ms forwards; }
+.pf-e { left: 50%; top: 50%; animation: pf-fly-e 780ms steps(5, end) 140ms forwards; }
+.pf-f { left: 50%; top: 50%; animation: pf-fly-f 800ms steps(5, end) 160ms forwards; }
+.pf-g { left: 50%; top: 50%; animation: pf-fly-g 820ms steps(5, end) 180ms forwards; }
+.pf-h { left: 50%; top: 50%; animation: pf-fly-h 840ms steps(5, end) 200ms forwards; }
+
+/* Keyframes: zentrale Explosion (pf-pop) und einzelne Flugbahnen. */
+@keyframes pf-pop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes pf-fly-a {
+  0%   { opacity: 1; transform: translate(0,0); }
+  100% { opacity: 0; transform: translate(36px,-10px); }
+}
+@keyframes pf-fly-b {
+  0%   { opacity: 1; transform: translate(0,0); }
+  100% { opacity: 0; transform: translate(24px,-28px); }
+}
+@keyframes pf-fly-c {
+  0%   { opacity: 1; transform: translate(0,0); }
+  100% { opacity: 0; transform: translate(0px,-36px); }
+}
+@keyframes pf-fly-d {
+  0%   { opacity: 1; transform: translate(0,0); }
+  100% { opacity: 0; transform: translate(-24px,-28px); }
+}
+@keyframes pf-fly-e {
+  0%   { opacity: 1; transform: translate(0,0); }
+  100% { opacity: 0; transform: translate(-36px,-10px); }
+}
+@keyframes pf-fly-f {
+  0%   { opacity: 1; transform: translate(0,0); }
+  100% { opacity: 0; transform: translate(-24px, 18px); }
+}
+@keyframes pf-fly-g {
+  0%   { opacity: 1; transform: translate(0,0); }
+  100% { opacity: 0; transform: translate( 0px, 26px); }
+}
+@keyframes pf-fly-h {
+  0%   { opacity: 1; transform: translate(0,0); }
+  100% { opacity: 0; transform: translate( 24px,18px); }
+}
+
+/* Static-Variante für Screenshots/Preview: Animationen deaktiviert, Dot-Positionen fix. */
+.pf-root--static .pf-dot {
+  animation: none !important;
+  opacity: 1 !important;
+}
+
+.pf-root--static .pf-center { transform: translate(-50%, -50%) scale(1); }
+.pf-root--static .pf-a { transform: translate(36px,-10px); }
+.pf-root--static .pf-b { transform: translate(24px,-28px); }
+.pf-root--static .pf-c { transform: translate(0px,-36px); }
+.pf-root--static .pf-d { transform: translate(-24px,-28px); }
+.pf-root--static .pf-e { transform: translate(-36px,-10px); }
+.pf-root--static .pf-f { transform: translate(-24px, 18px); }
+.pf-root--static .pf-g { transform: translate(0px, 26px); }
+.pf-root--static .pf-h { transform: translate(24px, 18px); }

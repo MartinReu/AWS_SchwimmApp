@@ -1,0 +1,42 @@
+/* Zentrales Stylesheet für alle globalen Teletext-/Tailwind-Styles der Schwimm-App.
+   Wird in main.tsx importiert und kombiniert Custom Tokens, Tailwind-Layer sowie Fonts. */
+@import "./styles/base/tokens.css";
+@import "tailwindcss";
+@import "./styles/base/teletext.css";
+
+/* === Font: Teletext ===
+   Datei unter: /src/assets/fonts/EuropeanTeletextNuevo.woff2
+*/
+@font-face {
+  font-family: "EuropeanTeletextNuevo";
+  src: url("/src/assets/fonts/EuropeanTeletextNuevo.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* === Farbtokens ===
+   Exakte HEX-Werte aus Figma nutzen?.
+*/
+html, body, #root { height: 100%; }
+
+body {
+  background: var(--tt-bg);
+  color: var(--tt-text);
+  font-family: var(--tt-font-family);
+}
+
+/* Teletext-typische Typo-Optik */
+.tt-text { letter-spacing: 0.02em; }
+
+/* Kachelrahmen (Logo) */
+.tt-tile {
+  background: var(--tt-white);
+  color: #111;
+  border: 4px solid #000;
+  box-shadow: 0 0 0 2px #fff inset;
+}
+
+/* Inputs: Platzhalter dezent, Caret in Blau */
+input::placeholder { color: color-mix(in oklab, var(--tt-blue) 55%, #5a5a5a); opacity: 1; }
+input { caret-color: var(--tt-blue); }

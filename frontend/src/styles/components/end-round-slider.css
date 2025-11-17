@@ -1,0 +1,41 @@
+/* End-Round Slider Styles: zeigt das animierte "Runde gewonnen"-Overlay über dem Slider-Bereich. */
+.win-overlay {
+  position: absolute;
+  inset: -24px; /* etwas größer als der Slider-Bereich, wirkt wie Vollbild im Aktions-Block */
+  display: grid;
+  place-items: center;
+  z-index: 30;
+  background: rgba(0,0,0,0.4);
+  animation: win-fade-in 180ms ease-out forwards;
+  opacity: 0;
+}
+
+/* Karte in der Mitte des Overlays mit Teletext-Konturen. */
+.win-card {
+  background: #fff;
+  border: 6px solid #000;
+  box-shadow: 0 6px 0 #111;
+  padding: 20px 24px;
+  text-align: center;
+}
+
+/* Primäre Headline, fett und teletextig. */
+.win-title {
+  font-family: var(--tt-font, inherit);
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+
+/* Untertitel für Zusatzinfos (z. B. Gewinnername). */
+.win-sub {
+  font-family: var(--tt-font, inherit);
+  font-weight: 600;
+  font-size: 16px;
+  opacity: 0.8;
+}
+
+@keyframes win-fade-in {
+  to { opacity: 1; }
+}

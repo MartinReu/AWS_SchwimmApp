@@ -1,0 +1,52 @@
+/* Player-List Styles: steuert Layout/Höhen der Spieleranzeige innerhalb Lobby/Game Screens. */
+:root {
+  --playerlist-item-height: 4.5rem;
+  --playerlist-gap: 0.5rem;
+  --playerlist-visible: 4;
+}
+
+.playerlist-grid {
+  --playerlist-gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: var(--playerlist-gap);
+}
+
+/* Scrollbare Variante, die auf max. N sichtbare Spieler begrenzt und dann Scroll aktiviert. */
+.playerlist-grid.playerlist-scrollable {
+  max-height: calc(
+    var(--playerlist-item-height) * var(--playerlist-visible)
+    + var(--playerlist-gap) * (var(--playerlist-visible) - 1)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
+  scrollbar-gutter: stable;
+}
+
+/* Custom Scrollbar-Farben für WebKit (passt zur Teletext-Farbpalette). */
+.playerlist-grid.playerlist-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.playerlist-grid.playerlist-scrollable::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--tt-blue, #0e4aff) 70%, #000);
+  border-radius: 999px;
+}
+
+.playerlist-grid.playerlist-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.playerlist-grid.playerlist-scrollable {
+  scrollbar-color: color-mix(in srgb, var(--tt-blue, #0e4aff) 70%, #000) transparent;
+}
+
+/* Einzelner Listeneintrag: feste Höhe erlaubt exakte Layout-Berechnung (z. B. Lives/Fireworks platzieren). */
+.playerlist-item {
+  min-height: var(--playerlist-item-height);
+  height: var(--playerlist-item-height);
+  box-sizing: border-box;
+  flex: 0 0 var(--playerlist-item-height);
+}

@@ -1,0 +1,47 @@
+/* Teletext-Basis-Tokens: liefert globale Farb-/Typo-Variablen, die Tailwind und Komponenten gemeinsam nutzen. */
+@layer base {
+  :root {
+    /* Grundstimmung des UI (Teletext-Dunkel) inkl. Abmessungen für Header/Footer. */
+    color-scheme: dark;
+    --tt-bg: #000000;
+    --tt-surface: #050505;
+    --tt-panel: #0c0c0c;
+    --tt-card: #111111;
+    --tt-text: #ffffff;
+    --tt-text-muted: #b3b3b3;
+    --tt-fg: #ffffff;
+    --tt-primary: #00ffff;
+    --tt-secondary: #ffff00;
+    --tt-accent: #ff00ff;
+    --tt-success: #00ff00;
+    --tt-info: #00a3ff;
+    --tt-warning: #ffa500;
+    --tt-danger: #ff3131;
+    --tt-border: #222222;
+    --tt-border-strong: #3b3b3b;
+    --tt-focus: #ffffff;
+    --tt-shadow: 0 4px 0 #0a0a0a;
+    --tt-green: #00ff00;
+    --tt-yellow: #ffff00;
+    --tt-blue: #00a3ff;
+    --tt-red: #ff3131;
+    --tt-cyan: #00ffff;
+    --tt-white: #ffffff;
+    /* Layout-Höhen für Shell-Header/-Footer und sichere Bereiche für Notches. */
+    --tt-header-h: 5rem;
+    --tt-footer-h: 2.75rem;
+    --tt-toolbar-h: 3rem;
+    --tt-safe-top: env(safe-area-inset-top, 0px);
+    --tt-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --tt-font-family: "EuropeanTeletextNuevo", ui-monospace, Menlo, Consolas, monospace;
+    --tt-font: var(--tt-font-family);
+  }
+
+  @media (min-width: 768px) {
+    /* Auf größeren Screens wirken Header/Footer etwas höher für das TV-Gefühl. */
+    :root {
+      --tt-header-h: 5.5rem;
+      --tt-footer-h: 3.25rem;
+    }
+  }
+}

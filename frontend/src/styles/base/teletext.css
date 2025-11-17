@@ -1,0 +1,530 @@
+/* Teletext-Komponentenstil: sammelt wiederverwendbare Shell-, Button- und Effekt-Klassen für die Schwimm-UI. */
+@layer components {
+  /* Grundlayout der Seite (Header/Content/Footer), simuliert einen Teletext-Rahmen. */
+  .tt-shell {
+    min-height: 100dvh;
+    min-height: 100vh;
+    background-color: var(--tt-bg);
+    color: var(--tt-text);
+    font-family: var(--tt-font-family);
+    display: flex;
+    flex-direction: column;
+    padding-top: var(--tt-safe-top);
+    padding-bottom: var(--tt-safe-bottom);
+  }
+
+  .tt-shell__header {
+    min-height: var(--tt-header-h);
+    border-bottom: 4px solid var(--tt-border-strong);
+    background-color: #050505;
+    background-image: none;
+  }
+
+  .tt-shell__content {
+    flex: 1;
+    min-height: calc(100dvh - var(--tt-header-h) - var(--tt-footer-h));
+    overflow-y: auto;
+    background-color: #050505;
+    background-image: none;
+    padding-top: 1.5rem;
+    padding-bottom: 2.5rem;
+  }
+
+  .tt-shell__footer {
+    min-height: var(--tt-footer-h);
+    border-top: 4px solid var(--tt-border-strong);
+    background: #050505;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--tt-text-muted);
+  }
+
+  .tt-shell__inner {
+    width: min(100%, 720px);
+    margin-inline: auto;
+    padding: 0 1.25rem;
+  }
+
+  @media (min-width: 640px) {
+    .tt-shell__inner {
+      padding: 0 2rem;
+    }
+  }
+
+  /* Buttons im Teletext-Look inkl. Fokus-/Active-States. */
+  .tt-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 3rem;
+    min-width: 3rem;
+    padding: 0 1.25rem;
+    border: 3px solid var(--tt-border);
+    border-radius: 0;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    box-shadow: var(--tt-shadow);
+    transition: background-color 200ms ease, color 200ms ease, transform 120ms ease;
+  }
+
+  .tt-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .tt-btn:not(:disabled):active {
+    transform: translateY(1px);
+  }
+
+  .tt-btn:focus-visible {
+    outline: 3px solid var(--tt-secondary);
+    outline-offset: 2px;
+  }
+
+  .tt-btn--primary {
+    background: var(--tt-primary);
+    border-color: var(--tt-secondary);
+    color: #000;
+  }
+
+  .tt-btn--secondary {
+    background: var(--tt-secondary);
+    border-color: var(--tt-primary);
+    color: #000;
+  }
+
+  .tt-btn--ghost {
+    background: transparent;
+    border-color: var(--tt-primary);
+    color: var(--tt-primary);
+  }
+
+  .tt-btn--danger {
+    background: var(--tt-danger);
+    border-color: #000;
+    color: #111;
+  }
+
+  .tt-btn--success {
+    background: var(--tt-success);
+    border-color: #000;
+    color: #031800;
+  }
+
+  .tt-btn--info {
+    background: var(--tt-info);
+    border-color: #000;
+    color: #001933;
+  }
+
+  .tt-btn--ghost:hover,
+  .tt-btn--ghost:focus-visible {
+    color: #000;
+    background: var(--tt-primary);
+  }
+
+  .tt-btn--lg {
+    height: 3.5rem;
+    padding-inline: 1.75rem;
+    font-size: 1.05rem;
+  }
+
+  .tt-btn__spinner {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 999px;
+    border: 3px solid rgba(0, 0, 0, 0.25);
+    border-top-color: currentColor;
+    animation: tt-spin 0.6s linear infinite;
+  }
+
+  .tt-btn__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tt-btn__label {
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  /* Formelemente, die Teletext-typisch aussehen (fette Typo, farbige Rahmen). */
+  .tt-input,
+  .tt-select,
+  .tt-search {
+    display: flex;
+    height: 3rem;
+    width: 100%;
+    align-items: center;
+    background: #050818;
+    border: 3px solid var(--tt-secondary);
+    padding: 0 1rem;
+    color: var(--tt-info);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 0;
+    box-shadow: inset 0 0 0 2px #000;
+  }
+
+  .tt-input::placeholder,
+  .tt-search::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: none;
+  }
+
+  .tt-input:focus-visible,
+  .tt-select:focus-visible,
+  .tt-search:focus-visible {
+    outline: 3px solid var(--tt-primary);
+    outline-offset: 2px;
+  }
+
+  .tt-input--error {
+    border-color: var(--tt-danger);
+    color: var(--tt-danger);
+  }
+
+  /* Panels und Karten mit farbigen Rahmen, die als Container für Lobby-/Playerdaten dienen. */
+  .tt-panel {
+    border: 4px solid var(--tt-secondary);
+    background-color: #000;
+    background-image: none !important;
+    box-shadow: var(--tt-shadow);
+    padding: 1rem;
+  }
+
+  .tt-panel--cyan {
+    border-color: var(--tt-primary);
+  }
+
+  .tt-panel--magenta {
+    border-color: var(--tt-accent);
+  }
+
+  .tt-panel--danger {
+    border-color: var(--tt-danger);
+  }
+
+  .tt-panel__title {
+    font-size: 1.25rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
+    color: var(--tt-secondary);
+  }
+
+  .tt-panel__body {
+    color: var(--tt-text);
+  }
+
+  .tt-transparent-panel {
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  /* Toolbar, z. B. für Lobby-Header mit Actions und Titeln. */
+  .tt-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    border: 4px solid var(--tt-primary);
+    background: #030712;
+    padding: 0.5rem;
+    box-shadow: var(--tt-shadow);
+  }
+
+  .tt-toolbar__title {
+    font-size: 1.5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: var(--tt-primary);
+    letter-spacing: 0.08em;
+  }
+
+  .tt-toolbar__description {
+    font-size: 0.85rem;
+    color: var(--tt-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .tt-toolbar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  .tt-card {
+    border: 3px solid var(--tt-border-strong);
+    background-color: #000;
+    background-image: none !important;
+    padding: 1rem;
+    box-shadow: 0 8px 0 rgba(0, 0, 0, 0.85);
+  }
+
+  .tt-panel[class*="bg-gradient"],
+  .tt-panel[class*="from-"],
+  .tt-panel[class*="via-"],
+  .tt-panel[class*="to-"],
+  .tt-card[class*="bg-gradient"],
+  .tt-card[class*="from-"],
+  .tt-card[class*="via-"],
+  .tt-card[class*="to-"] {
+    background-image: none !important;
+    background-color: #000 !important;
+  }
+
+  .tt-badge {
+    display: inline-flex;
+    align-items: center;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border: 2px solid currentColor;
+  }
+
+  .tt-tag {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border: 2px solid var(--tt-border);
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  /* Scrollbare Bereiche für Listen (Spielerlisten, Quotes etc.) mit angepassten Scrollbars. */
+  .tt-scroll-area {
+    max-height: 40dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  @media (min-width: 768px) {
+    .tt-scroll-area {
+      max-height: 50dvh;
+    }
+  }
+
+  .tt-scroll-area::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .tt-scroll-area::-webkit-scrollbar-track {
+    background: #050505;
+  }
+
+  .tt-scroll-area::-webkit-scrollbar-thumb {
+    background: var(--tt-primary);
+    border: 2px solid #000;
+  }
+
+  /* Fortschrittsanzeige (z. B. Countdown/Status) mit animiertem Balken. */
+  .tt-progress-track {
+    position: relative;
+    height: 0.85rem;
+    border: 4px solid #000;
+    background: var(--tt-yellow);
+    box-shadow: inset 0 0 0 2px #111;
+    overflow: hidden;
+  }
+
+  .tt-progress-track::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      -45deg,
+      rgba(0, 0, 0, 0.08) 0 3px,
+      transparent 3px 6px
+    );
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .tt-progress-bar {
+    position: relative;
+    height: 100%;
+    width: 100%;
+    background: repeating-linear-gradient(
+      90deg,
+      #000 0 8px,
+      #101010 8px 16px
+    );
+    transform-origin: left center;
+    animation-name: tt-teletext-progress;
+    animation-timing-function: steps(28, end);
+    animation-fill-mode: forwards;
+    will-change: transform;
+    z-index: 1;
+  }
+
+  .tt-progress-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent 65%);
+    mix-blend-mode: screen;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .tt-text {
+    font-family: var(--tt-font-family);
+    letter-spacing: 0.02em;
+  }
+
+  /* Pulsierende Punkte für Loading-Zustände (z. B. während RedirectNote). */
+  .tt-ellipsis-anim {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 0.1em;
+    margin-left: 0.35em;
+    letter-spacing: 0.08em;
+    vertical-align: baseline;
+  }
+
+  .tt-ellipsis-anim span {
+    display: block;
+    font-weight: 900;
+    line-height: 1;
+    color: currentColor;
+    opacity: 0;
+    text-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
+    animation: tt-ellipsis-dot 1.8s steps(1, end) infinite;
+  }
+
+  .tt-ellipsis-anim span:nth-child(2) {
+    animation-delay: 0.45s;
+  }
+
+  .tt-ellipsis-anim span:nth-child(3) {
+    animation-delay: 0.9s;
+  }
+
+  /* Scanline-Hovereffekt, um Buttons/Links retro wirken zu lassen. */
+  .tt-pixel-hover {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tt-pixel-hover::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    background-image: repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.2) 0 2px,
+      transparent 2px 4px
+    );
+    mix-blend-mode: screen;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+
+  .tt-pixel-hover:hover::after,
+  .tt-pixel-hover:focus-visible::after {
+    opacity: 0.55;
+    animation: tt-pixel-scan 420ms steps(3, end) infinite;
+  }
+
+  .tt-page-transition {
+    animation: tt-page-slide 360ms cubic-bezier(0.34, 0.95, 0.45, 1) both;
+  }
+}
+
+/* Animationsdefinitionen für Spinner, Progress, Ellipse usw. */
+@keyframes tt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tt-teletext-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes tt-ellipsis-dot {
+  0% {
+    opacity: 0;
+  }
+  15%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes tt-pixel-scan {
+  0% {
+    transform: translateY(-4px);
+  }
+  100% {
+    transform: translateY(4px);
+  }
+}
+
+@keyframes tt-page-slide {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-btn,
+  .tt-panel,
+  .tt-toolbar,
+  .tt-card {
+    transition: none !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .tt-progress-bar {
+    animation: none !important;
+    transform: scaleX(1) !important;
+  }
+
+  .tt-ellipsis-anim span,
+  .tt-pixel-hover::after {
+    animation: none !important;
+  }
+
+  .tt-ellipsis-anim span {
+    opacity: 1 !important;
+  }
+
+  .tt-pixel-hover::after {
+    opacity: 0.2;
+  }
+
+  .tt-page-transition {
+    animation: none !important;
+  }
+}
