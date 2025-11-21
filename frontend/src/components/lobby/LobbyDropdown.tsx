@@ -44,6 +44,7 @@ export default function LobbyDropdown({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const normalizedOptions = useMemo(() => options.map(normalizeOption), [options]);
@@ -111,11 +112,13 @@ export default function LobbyDropdown({
           value={query}
           onChange={(e) => onInput(e.target.value)}
           onKeyDown={onKey}
-          placeholder={placeholder}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          placeholder={isFocused || query.trim().length > 0 ? "" : placeholder}
           maxLength={maxLen}
           disabled={disabled}
           className={clsx(
-            "tt-input rounded-none border-[3px] border-[var(--tt-secondary)] bg-[#050818] text-[var(--tt-info)] placeholder:text-white/60",
+            "tt-input rounded-none border-[3px] border-[var(--tt-secondary)] bg-[#050818] text-[var(--tt-info)] placeholder:text-white/60 focus:placeholder-transparent",
             error && "tt-input--error",
             disabled && "cursor-not-allowed opacity-60"
           )}

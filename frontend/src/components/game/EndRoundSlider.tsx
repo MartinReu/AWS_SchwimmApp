@@ -24,6 +24,7 @@ export default function EndRoundSlider({ onComplete, disabled }: Props) {
   const [trackW, setTrackW] = useState(1);
   const [handleW, setHandleW] = useState(0);
   const maxPx = Math.max(0, trackW - handleW);
+  const handleWidth = handleW || 48;
 
   // Linke Kante des Handles in px (0..maxPx)
   const [posPx, setPosPx] = useState(0);
@@ -156,11 +157,16 @@ export default function EndRoundSlider({ onComplete, disabled }: Props) {
           {/* SCHWARZER BALKEN – linke Kante folgt der Flagge (synchron), rechts verankert */}
           <div
             className="absolute inset-y-0 right-0 bg-black text-white border-4 border-black overflow-hidden"
-            style={{ left: `${posPx}px`, right: 0 }}
+            style={{ left: `${Math.min(trackW, posPx + handleWidth)}px`, right: 0 }}
             aria-hidden
           >
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-2xl tt-text">Runde&nbsp;beenden</span>
+              <span className="text-2xl tt-text flex items-center gap-3">
+                <span aria-hidden="true" className="font-black tracking-[0.3em] text-[var(--tt-secondary)]">
+                  {">>>"}
+                </span>
+                <span>Runde&nbsp;beenden</span>
+              </span>
             </div>
           </div>
 

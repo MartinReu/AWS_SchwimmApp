@@ -11,10 +11,10 @@
     --tt-text-muted: #b3b3b3;
     --tt-fg: #ffffff;
     --tt-primary: #00ffff;
-    --tt-secondary: #ffff00;
-    --tt-accent: #ff00ff;
+    --tt-secondary: #faff00;
+    --tt-accent: #ff3131;
     --tt-success: #00ff00;
-    --tt-info: #00a3ff;
+    --tt-info: #0500ff;
     --tt-warning: #ffa500;
     --tt-danger: #ff3131;
     --tt-border: #222222;
@@ -22,8 +22,8 @@
     --tt-focus: #ffffff;
     --tt-shadow: 0 4px 0 #0a0a0a;
     --tt-green: #00ff00;
-    --tt-yellow: #ffff00;
-    --tt-blue: #00a3ff;
+    --tt-yellow: #faff00;
+    --tt-blue: #0500ff;
     --tt-red: #ff3131;
     --tt-cyan: #00ffff;
     --tt-white: #ffffff;

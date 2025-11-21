@@ -86,8 +86,8 @@ export default function GamePlayerList({
             <div
               key={p.id}
               className={clsx(
-                "playerlist-item relative grid grid-cols-[auto_1fr_auto] items-stretch border-4 border-black bg-[#fff26e] shadow-[0_4px_0_#111] transition-shadow duration-150",
-                isSelf && "ring-4 ring-blue-500/70 ring-offset-2 ring-offset-[#fff7c1]"
+                "playerlist-item relative grid grid-cols-[auto_1fr_auto] items-stretch border-4 border-black bg-[var(--tt-yellow,#faff00)] shadow-[0_4px_0_#111] transition-shadow duration-150",
+                isSelf && "ring-4 ring-blue-500/70 ring-offset-2 ring-offset-[var(--tt-yellow,#faff00)]"
               )}
               aria-current={isSelf ? "true" : undefined}
             >
