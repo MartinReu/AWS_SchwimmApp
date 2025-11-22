@@ -38,7 +38,7 @@ export default function GamePlayerList({
   const canRenderFirework = FIREWORKS_ENABLED;
   const sessionSeed = useMemo(() => loadSession(), []);
   const myPlayerId = currentPlayerId ?? sessionSeed?.playerId ?? "";
-  const myPlayerName = currentPlayerName ?? sessionSeed?.playerName ?? "";
+  const myPlayerName = (currentPlayerName ?? sessionSeed?.playerName ?? "").toUpperCase();
   const scoreLookup = useMemo(() => {
     const map = new Map<string, number>();
     scores.forEach((score) => {
@@ -78,8 +78,9 @@ export default function GamePlayerList({
       >
         {playersSorted.map((p, i) => {
           const playerScore = scoreLookup.get(p.id) ?? 0;
+          const displayName = p.name.toUpperCase();
           const isSelf =
-            (myPlayerId && p.id === myPlayerId) || (myPlayerName && p.name.localeCompare(myPlayerName, undefined, { sensitivity: "accent" }) === 0);
+            (myPlayerId && p.id === myPlayerId) || (myPlayerName && displayName.localeCompare(myPlayerName, undefined, { sensitivity: "accent" }) === 0);
           const isLeader = i === 0;
 
           return (
@@ -120,7 +121,7 @@ export default function GamePlayerList({
                   isSelf && "bg-[#e8f0ff] font-semibold text-[#0e4aff]"
                 )}
               >
-                {p.name}
+                {displayName}
               </div>
 
               {/* Score rechts */}

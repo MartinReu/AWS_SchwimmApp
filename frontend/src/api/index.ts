@@ -2,7 +2,7 @@
  * Zentrale Re-Exports der API-Layer.
  * `api` bietet weiterhin das alte Objektinterface, während einzelne Funktionen direkt importiert werden können.
  */
-import { listLobbies, getLobby, createLobby, listPlayers } from "./lobbies";
+import { listLobbies, getLobby, createLobby, listPlayers, fetchAllPlayerNames } from "./lobbies";
 import { listQuotes, createQuote } from "./quotes";
 import { getCurrentRound, startNextRound, updateLife, finishRound } from "./game";
 
@@ -17,6 +17,7 @@ export const api = {
   getLobby,
   createLobby,
   listPlayers,
+  fetchAllPlayerNames,
   listQuotes,
   createQuote,
   getCurrentRound,

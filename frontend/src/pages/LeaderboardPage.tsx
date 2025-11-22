@@ -52,6 +52,10 @@ export default function LeaderboardPage() {
   }, [entries, search]);
 
   const hasNoResults = !loading && !error && visibleEntries.length === 0;
+  const sessionLobbyExists = useMemo(
+    () => (session?.lobbyId ? entries.some((entry) => entry.lobbyId === session.lobbyId) : false),
+    [entries, session?.lobbyId]
+  );
 
   useEffect(() => {
     // Lädt initial und bei Suchänderung die Leaderboard-Daten.
@@ -153,7 +157,7 @@ export default function LeaderboardPage() {
           </div>
         </TTToolbar>
 
-        <ResumeGameCallout session={session} isConfirmed={resumeConfirmed} />
+        <ResumeGameCallout session={session} isConfirmed={resumeConfirmed} lobbyExists={sessionLobbyExists} />
 
         <TTPanel title="Rejoin-Hinweis" eyebrow=">> Info" variant="cyan">
           <p className="text-sm text-white">
@@ -331,6 +335,7 @@ function LobbyCard({ lobby, onDeleted }: LobbyCardProps) {
         const total = Number(player.pointsTotal ?? 0);
         return {
           ...player,
+          name: player.name.toUpperCase(),
           pointsTotal: Number.isFinite(total) ? total : 0,
         };
       })

@@ -82,6 +82,9 @@ Mobile-first Vite/React-Frontend mit Teletext-/8-Bit-Look für das Kartenspiel �
 - Mobile-first Layouts, optimiert für Touch, aber responsive bis Desktop.
 - Bis zu **acht Spieler** pro Lobby, Lives/Points werden über Pixelanzeiger und Slider gesteuert.
 - Lobby-/Spieler-Resume nutzt URL-Parameter + `localStorage`, Leaderboards bieten SSE & Polling.
+- Spieleridentitäten werden über `frontend/src/context/PlayerSessionContext.tsx` zentral gehalten und landen zusätzlich in `localStorage`, sodass LoginPage und HomePage denselben Namen teilen.
+- Visuelle Übergänge und Login-Intro steuert `frontend/src/context/TransitionOverlayContext.tsx` (Bubble-Overlay) plus `LoadingOverlay` auf der LoginPage; deaktivierbar über `VITE_ENABLE_PAGE_TRANSITIONS`.
+- Routing & Session: Erstbesuch führt nach `/login`, erfolgreiche Logins werden unter `localStorage`-Key `schwimm_player_session` (inkl. Spielernamen + optionaler Lobby-Info) abgelegt. Solange eine Session existiert, bleiben Reloads und Home-Links auf `/`, ein direkter Aufruf von `/login` wird auf die HomePage umgeleitet. Logout bzw. leeres Storage zeigt wieder die LoginPage.
 - API-Schnittstellen können sich ändern, sobald das echte Amplify-Backend erreichbar ist. Mock-Endpunkte spiegeln aber schon jetzt die geplanten Routen.
 
 ### Architektur-Überblick
@@ -100,6 +103,8 @@ Mobile-first Vite/React-Frontend mit Teletext-/8-Bit-Look für das Kartenspiel �
 
 ### Spiel- & Lobby-Flows
 
+- Einstieg erfolgt über `/login` (`frontend/src/pages/LoginPage.tsx`). Die Seite lädt bekannte Spielernamen via `api.fetchAllPlayerNames()` (Mock-Route `GET /players/all-names`), setzt den Wert im PlayerSessionContext und navigiert anschließend zur HomePage.
+- `/` bleibt die HomePage, leitet aber automatisch auf `/login` um, sofern kein Spielername gesetzt ist (im Rejoin-Modus `?mode=rejoin` bleibt der Direktzugriff erhalten).
 - Lobby anlegen, Spieler joinen oder per Resume-Key reaktivieren (max. 8 Spieler).  
 - Slider beendet Runden, Lives werden via Pixel-Sticks gemeldet; „Schwimmst“ blockiert Spieler bis zum Lose-Screen.  
 - Leaderboard zeigt aggregierte Scores inkl. Statusmeldungen/Fehlertexte und Rejoin-Shortcuts.  
@@ -108,12 +113,14 @@ Mobile-first Vite/React-Frontend mit Teletext-/8-Bit-Look für das Kartenspiel �
 
 ### Manuelle Smoke-Tests
 
-1. **Rejoin-Flow** – Lobby erstellen, Spieler verbinden, Browser neu laden und erneut joinen: Spieler-ID bleibt stabil, Game öffnet sich automatisch.  
-2. **Lobby-Dropdown & A11y** – Dropdown öffnen, Fokus/Keyboard testen (`aria-busy`, Hover-Ringe).  
-3. **Runde beenden/Winner** – Slider ziehen, Backend bestätigt Gewinner, `/lobby/:name/win` zeigt Ergebnis.  
-4. **Lose-Screen** – „Schwimmst“ triggern, Lose-Route wird aktiv, Neustart führt zurück in die Runde.  
-5. **Routing & Deep-Linking** – Direkt `/lobby/<name>/round/<number>` oder Legacy-URL aufrufen; Zustand wird rekonstruiert.  
-6. **Leaderboard-Statusmeldungen** – Laden, Fehlerfälle und leere Suchergebnisse prüfen; SSE aktivieren, falls `VITE_LEADERBOARDS_STREAM_URL` gesetzt ist.
+1. **Login-Flow** – App aufrufen, LoginPage sehen, bestehenden oder neuen Namen wählen und bestätigen. Danach sollte die HomePage direkt mit dem gewählten Namen erscheinen.  
+2. **Spielername merken** – Nach dem Login reloaden: HomePage bleibt zugänglich und übernimmt den gespeicherten Namen automatisch.  
+3. **Rejoin-Flow** – Lobby erstellen, Spieler verbinden, Browser neu laden und erneut joinen: Spieler-ID bleibt stabil, Game öffnet sich automatisch.  
+4. **Lobby-Dropdown & A11y** – Dropdown öffnen, Fokus/Keyboard testen (`aria-busy`, Hover-Ringe).  
+5. **Runde beenden/Winner** – Slider ziehen, Backend bestätigt Gewinner, `/lobby/:name/win` zeigt Ergebnis.  
+6. **Lose-Screen** – „Schwimmst“ triggern, Lose-Route wird aktiv, Neustart führt zurück in die Runde.  
+7. **Routing & Deep-Linking** – Direkt `/lobby/<name>/round/<number>` oder Legacy-URL aufrufen; Zustand wird rekonstruiert.  
+8. **Leaderboard-Statusmeldungen** – Laden, Fehlerfälle und leere Suchergebnisse prüfen; SSE aktivieren, falls `VITE_LEADERBOARDS_STREAM_URL` gesetzt ist.
 
 ## Roadmap / Backend
 

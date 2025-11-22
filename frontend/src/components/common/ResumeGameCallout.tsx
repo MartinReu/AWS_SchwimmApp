@@ -15,6 +15,7 @@ type ResumeGameCalloutProps = {
   className?: string;
   requireExplicitResume?: boolean;
   isConfirmed?: boolean;
+  lobbyExists?: boolean;
 };
 
 export default function ResumeGameCallout({
@@ -23,15 +24,17 @@ export default function ResumeGameCallout({
   className,
   requireExplicitResume = false,
   isConfirmed = true,
+  lobbyExists = true,
 }: ResumeGameCalloutProps) {
   const navigate = useNavigate();
   const resumeSession = useMemo(() => session ?? loadSession(), [session]);
 
   const isEligible = useMemo(() => {
+    if (!lobbyExists) return false;
     if (!resumeSession?.lobbyName || !resumeSession?.lobbyId || !resumeSession?.playerId) return false;
     if (requireExplicitResume) return resumeSession.resumeEligible === true;
     return resumeSession.resumeEligible !== false;
-  }, [requireExplicitResume, resumeSession]);
+  }, [lobbyExists, requireExplicitResume, resumeSession]);
 
   const resolvedRoundNumber = roundNumber ?? resumeSession?.resumeRoundNumber ?? null;
 

@@ -24,6 +24,7 @@ export type LobbySessionInput = Omit<LobbySession, "updatedAt">;
 
 const STORAGE_KEY = "schwimm_session_v1";
 const CLIENT_SESSION_STORAGE_KEY = "schwimm_client_session_id_v1";
+const MAX_SESSION_AGE_MS = 1000 * 60 * 60 * 6; // 6 Stunden: verhindert alte Cache-Sessions beim Ersteinstieg
 
 /**
  * Liest die zuletzt persistierte Lobby-Session aus localStorage.
@@ -43,6 +44,7 @@ export function loadSession(): LobbySession | null {
     ) {
       return null;
     }
+    const ageOk = typeof parsed.updatedAt === "number" && Date.now() - parsed.updatedAt <= MAX_SESSION_AGE_MS;
     const clientSessionId =
       typeof parsed.clientSessionId === "string" && parsed.clientSessionId.trim().length > 0
         ? parsed.clientSessionId
@@ -59,7 +61,9 @@ export function loadSession(): LobbySession | null {
         : parsed.resumeRoundNumber === null
         ? null
         : undefined;
-    return { ...parsed, clientSessionId, resumeEligible, resumeView, resumeRoundNumber };
+    const playerName = parsed.playerName.toUpperCase();
+    if (!ageOk) return null;
+    return { ...parsed, clientSessionId, resumeEligible, resumeView, resumeRoundNumber, playerName };
   } catch {
     return null;
   }
@@ -74,8 +78,8 @@ export function storeSession(next: LobbySessionInput | LobbySession) {
   try {
     const payload: LobbySession =
       "updatedAt" in next && typeof next.updatedAt === "number"
-        ? (next as LobbySession)
-        : { ...(next as LobbySessionInput), updatedAt: Date.now() };
+        ? ({ ...(next as LobbySession), playerName: next.playerName.toUpperCase() })
+        : { ...(next as LobbySessionInput), playerName: next.playerName.toUpperCase(), updatedAt: Date.now() };
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify(payload)

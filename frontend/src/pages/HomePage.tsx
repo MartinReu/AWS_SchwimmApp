@@ -10,7 +10,7 @@ import LobbyLogo from "../components/lobby/LobbyLogo";
 import LobbyQuoteBox from "../components/lobby/LobbyQuoteBox";
 import LobbyDropdown from "../components/lobby/LobbyDropdown";
 import { api, Lobby, Player } from "../api";
-import { loadSession, storeSession, getClientSessionId } from "../utils/session";
+import { loadSession, storeSession, getClientSessionId, clearSession } from "../utils/session";
 import { roundPath } from "../utils/paths";
 import RootLayout from "../components/common/layout/RootLayout";
 import TTButton from "../components/common/ui/TTButton";
@@ -18,6 +18,7 @@ import TTPanel from "../components/common/ui/TTPanel";
 import TTToolbar from "../components/common/ui/TTToolbar";
 import { useJoinOrRejoin, getJoinErrorMessage } from "../hooks/useJoinOrRejoin";
 import ResumeGameCallout from "../components/common/ResumeGameCallout";
+import { usePlayerSession } from "../context/PlayerSessionContext";
 
 const MAX_LOBBY_NAME = 22;
 const MAX_PLAYER_NAME = 18;
@@ -28,6 +29,13 @@ const UNSAFE_NAME_PATTERN = /[<>]/; // Primitive XSS-Blocke – keine spitzen Kl
 export default function HomePage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentPlayerName, logout } = usePlayerSession();
+  const session = useMemo(() => loadSession(), []);
+  const resolvedPlayerName = useMemo(
+    () => (currentPlayerName || session?.playerName || "").trim(),
+    [currentPlayerName, session?.playerName]
+  );
+  const displayPlayerName = resolvedPlayerName ? resolvedPlayerName.toUpperCase() : "";
   // Rejoin-Route-Infos (Lobbyname/-ID) aus URL und Navigation-State rekonstruieren.
   const rejoinPayload = useMemo(
     () => (ENABLE_REJOIN_MODE ? resolveRejoinPayload(location.search, location.state) : null),
@@ -38,12 +46,11 @@ export default function HomePage() {
   const rejoinLobbyId = rejoinPayload?.lobbyId ?? null;
   // Cache der verfügbaren Lobbys aus dem Backend.
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
+  const [allowedLobbies, setAllowedLobbies] = useState<Lobby[]>([]);
   // Lade-/Fehlerzustand für die Lobby-Liste.
   const [loading, setLoading] = useState(true);
   const [errorLoad, setErrorLoad] = useState<string | null>(null);
 
-  // Persistierte Sessiondaten (Resume, Präsenz, Client-IDs).
-  const session = useMemo(() => loadSession(), []);
   // Wiederverwendete Client-Session-ID, erzeugt falls noch keine existiert.
   const clientSessionId = useMemo(
     () => session?.clientSessionId ?? getClientSessionId() ?? undefined,
@@ -51,8 +58,6 @@ export default function HomePage() {
   );
   // Lobby-Input: bewusst immer leer starten, kein Auto-Fill aus Storage.
   const [lobbyName, setLobbyName] = useState("");
-  // Spieler-Input: wird nur durch Nutzeraktion oder Rejoin-Flow gesetzt.
-  const [playerName, setPlayerName] = useState("");
 
   // Validierungsfehler für Lobby- bzw. Spielerfelder.
   const [errLobby, setErrLobby] = useState<string | null>(null);
@@ -79,6 +84,34 @@ export default function HomePage() {
       .catch((e) => setErrorLoad(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    // Filtert nur Lobbys, in denen der aktuelle Spieler existiert.
+    if (!resolvedPlayerName || !lobbies.length) {
+      setAllowedLobbies([]);
+      return;
+    }
+    let active = true;
+    const normalizedName = normalize(resolvedPlayerName);
+    (async () => {
+      const results = await Promise.all(
+        lobbies.map(async (lobby) => {
+          try {
+            const players = await api.listPlayers(lobby.id);
+            const match = players.some((player) => normalize(player.name) === normalizedName);
+            return match ? lobby : null;
+          } catch {
+            return null;
+          }
+        })
+      );
+      if (!active) return;
+      setAllowedLobbies(results.filter(Boolean) as Lobby[]);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [lobbies, resolvedPlayerName]);
 
   useEffect(() => {
     // Prüft, ob eine gespeicherte Session weiterhin rejoin-fähig ist.
@@ -108,16 +141,14 @@ export default function HomePage() {
     if (isRejoinMode && rejoinLobbyName) setLobbyName(rejoinLobbyName);
   }, [isRejoinMode, rejoinLobbyName]);
 
-  useEffect(() => {
-    // Rejoin-Modus erzwingt ein leeres Eingabefeld (Namen nur via Dropdown).
-    if (isRejoinMode) {
-      setPlayerName("");
-      setErrPlayer(null);
+  // Text-Optionen für das Lobby-Dropdown (nur Lobbys, in denen der Spieler existiert, plus Rejoin-Fallback).
+  const lobbyOptions = useMemo(() => {
+    const base = allowedLobbies.map((l) => l.name);
+    if (isRejoinMode && rejoinPayload?.lobbyName && !base.includes(rejoinPayload.lobbyName)) {
+      return [rejoinPayload.lobbyName, ...base];
     }
-  }, [isRejoinMode]);
-
-  // Text-Optionen für das Lobby-Dropdown.
-  const lobbyOptions = useMemo(() => lobbies.map(l => l.name), [lobbies]);
+    return base;
+  }, [allowedLobbies, isRejoinMode, rejoinPayload?.lobbyName]);
   // Gesuchte Lobby anhand normalisierter Namen wiederfinden.
   const selectedLobby = useMemo(() => {
     const normalized = normalize(lobbyName);
@@ -133,8 +164,8 @@ export default function HomePage() {
     lobbyPlayers.forEach((player) => map.set(normalize(player.name), player));
     return map;
   }, [lobbyPlayers]);
-  // Aktuell im Eingabefeld ausgewählter Spieler (Rejoin).
-  const selectedPlayer = playerName.trim() ? normalizedPlayerMap.get(normalize(playerName)) ?? null : null;
+  // Aktueller Spieler auf Basis des Login-Namens.
+  const selectedPlayer = resolvedPlayerName ? normalizedPlayerMap.get(normalize(resolvedPlayerName)) ?? null : null;
   // Anzahl aktiver Spieler:innen, um Volllobby zu erkennen.
   const activePlayerCount = useMemo(
     () => lobbyPlayers.filter((player) => player.isActive !== false).length,
@@ -146,19 +177,6 @@ export default function HomePage() {
     [lobbyPlayers]
   );
   const isLobbyFull = activePlayerCount >= 8;
-  // Baut Dropdown-Optionen: bei Rejoin mit Zusatz-Hinweis, sonst simple Strings.
-  const playerOptions = useMemo(() => {
-    if (!isRejoinMode) return lobbyPlayers.map((player) => player.name);
-    return lobbyPlayers.map((player) => ({
-      label: player.name,
-      value: player.name,
-      disabled: false,
-      hint:
-        player.isActive !== false
-          ? "Noch aktiv – geduld mein Kind oder nimm denselben Tab."
-        : "Inaktiv – bereit fürs Comeback.",
-    }));
-  }, [isRejoinMode, lobbyPlayers]);
   // Warnt später, wenn noch kein Slot frei ist.
   const allPlayersStillActive = isRejoinMode && inactivePlayers.length === 0 && lobbyPlayers.length > 0;
 
@@ -206,29 +224,26 @@ export default function HomePage() {
   }, [isRejoinMode, lobbyName, selectedLobby]);
 
   useEffect(() => {
-    // Join-Modus: prüft die freie Eingabe auf Länge und Grenzen.
-    if (isRejoinMode) return;
-    const trimmed = playerName.trim();
-    if (!trimmed) setErrPlayer(null);
-    else if (hasUnsafeCharacters(trimmed)) setErrPlayer("Keine spitzen Klammern oder HTML in Namen – Sicherheit geht vor.");
-    else if (trimmed.length < 2) setErrPlayer("Mindestens 2 Zeichen, dann läuft's.");
-    else if (trimmed.length > MAX_PLAYER_NAME) setErrPlayer(`Max. ${MAX_PLAYER_NAME} Zeichen – für wen hälst du dich?`);
-    else setErrPlayer(null);
-  }, [playerName, isRejoinMode]);
-
-  useEffect(() => {
-    // Rejoin-Modus: zwingt zur Auswahl eines existierenden Namens.
-    if (!isRejoinMode) return;
-    if (!playerName.trim()) {
-      setErrPlayer(null);
+    // Spielername kommt jetzt ausschließlich aus dem Login – prüfen, ob er verwendbar ist.
+    if (!resolvedPlayerName) {
+      setErrPlayer("Kein Spielername gefunden – bitte neu einloggen.");
       return;
     }
-    if (!selectedPlayer) {
-      setErrPlayer("Bitte schnapp dir einen Namen direkt aus der Liste.");
-    } else {
+    if (hasUnsafeCharacters(resolvedPlayerName)) setErrPlayer("Keine spitzen Klammern oder HTML in Namen – Sicherheit geht vor.");
+    else if (resolvedPlayerName.length < 2) setErrPlayer("Mindestens 2 Zeichen, dann läuft's.");
+    else if (resolvedPlayerName.length > MAX_PLAYER_NAME) setErrPlayer(`Max. ${MAX_PLAYER_NAME} Zeichen – für wen hälst du dich?`);
+    else setErrPlayer(null);
+  }, [resolvedPlayerName]);
+
+  useEffect(() => {
+    // Rejoin-Modus: Name muss in der Lobby vorkommen.
+    if (!isRejoinMode || !resolvedPlayerName) return;
+    if (!selectedPlayer && !playersLoading && !playersError) {
+      setErrPlayer("Dein Name ist in dieser Lobby nicht vorhanden – wähle eine andere Lobby oder starte neu.");
+    } else if (selectedPlayer) {
       setErrPlayer(null);
     }
-  }, [isRejoinMode, playerName, selectedPlayer]);
+  }, [isRejoinMode, playersError, playersLoading, resolvedPlayerName, selectedPlayer]);
 
   /** Legt eine neue Lobby an und hängt sie optimistisch an die bestehende Liste. */
   async function createLobby() {
@@ -254,6 +269,11 @@ export default function HomePage() {
   /** Handhabt Join- und Rejoin-Flow inkl. Validierung & Session-Persistenz. */
   async function joinLobby() {
     setMsg(null);
+    if (!resolvedPlayerName) {
+      setErrPlayer("Kein Spielername gefunden – bitte neu einloggen.");
+      navigate("/login", { replace: true });
+      return;
+    }
     const target = lobbyTarget;
     if (!target) {
       setErrLobby("Wähle eine bestehende Lobby oder starte fix eine neue.");
@@ -261,11 +281,10 @@ export default function HomePage() {
     }
     if (isRejoinMode) {
       if (!selectedPlayer) {
-        setErrPlayer("Bitte nimm einen Namen direkt aus der Liste.");
+        setErrPlayer("Dein Name ist in dieser Lobby nicht vorhanden – nimm eine andere oder starte neu.");
         return;
       }
-    } else if (errPlayer || !playerName.trim()) {
-      setErrPlayer("Tippe einen spielbaren Namen ein.");
+    } else if (errPlayer) {
       return;
     } else if (selectedPlayer && selectedPlayer.isActive !== false) {
       setErrPlayer("Dieser Name ist noch aktiv – schnapp dir einen anderen.");
@@ -273,7 +292,7 @@ export default function HomePage() {
     }
 
     try {
-      const trimmed = (isRejoinMode ? selectedPlayer?.name ?? "" : playerName).trim();
+      const trimmed = (isRejoinMode ? selectedPlayer?.name ?? "" : resolvedPlayerName).trim().toUpperCase();
       if (!isRejoinMode && !selectedLobby && hasUnsafeCharacters(trimmed)) {
         setErrPlayer("Name enthält gesperrte Zeichen. Versuch es ohne < oder >.");
         return;
@@ -293,7 +312,7 @@ export default function HomePage() {
         expectExisting: expectsExistingPlayer,
       });
 
-      const resolvedPlayerName = joinedPlayer.name?.trim() || trimmed;
+      const joinedPlayerName = joinedPlayer.name?.trim() || trimmed;
 
       const shouldKeepLoseResume =
         session &&
@@ -305,7 +324,7 @@ export default function HomePage() {
         lobbyId: target.id,
         lobbyName: target.name,
         playerId: joinedPlayer.id,
-        playerName: resolvedPlayerName,
+        playerName: joinedPlayerName,
         ...(clientSessionId ? { clientSessionId } : {}),
         resumeEligible: true,
         updatedAt: Date.now(),
@@ -322,12 +341,11 @@ export default function HomePage() {
       });
 
       setLobbyPlayers(prev => prev.filter(player => player.id !== joinedPlayer.id));
-      if (isRejoinMode) setPlayerName("");
 
       setMsg(
         mode === "rejoin"
-          ? `Zurück im Wasser: ${resolvedPlayerName} → ${target.name}`
-          : `Beigetreten: ${resolvedPlayerName} → ${target.name}`
+          ? `Zurück im Wasser: ${joinedPlayerName} → ${target.name}`
+          : `Beigetreten: ${joinedPlayerName} → ${target.name}`
       );
       navigate(roundPath({ lobbyName: target.name, lobbyId: target.id }));
     } catch (error) {
@@ -337,10 +355,16 @@ export default function HomePage() {
 
   // Flags für UI-Zustände (Button-Enablement, Hinweise).
   const playerListEmpty = Boolean(resolvedLobbyId) && !playersLoading && !playersError && lobbyPlayers.length === 0;
-  const hasValidPlayerInput = isRejoinMode ? Boolean(selectedPlayer) : playerName.trim().length >= 2;
+  const hasValidPlayerInput = isRejoinMode ? Boolean(selectedPlayer) : resolvedPlayerName.length >= 2;
   const allowJoinWhenFull = !isLobbyFull || (isRejoinMode && Boolean(selectedPlayer));
   const canCreate = !busyCreate && !errLobby && lobbyName.trim().length >= 2;
   const canJoin = !joiningLobby && !!lobbyTarget && !errPlayer && hasValidPlayerInput && allowJoinWhenFull;
+
+  const handleLogout = () => {
+    logout();
+    clearSession();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <RootLayout
@@ -356,14 +380,23 @@ export default function HomePage() {
               : "Starte eine neue Runde oder spring in eine laufende Lobby."
           }
           actions={
-            <TTButton
-              as={Link}
-              to="/leaderboard"
-              variant="secondary"
-              className="justify-center"
-            >
-              Rangliste
-            </TTButton>
+            <div className="flex flex-wrap gap-2">
+              <TTButton
+                variant="ghost"
+                onClick={handleLogout}
+                className="justify-center"
+              >
+                Logout
+              </TTButton>
+              <TTButton
+                as={Link}
+                to="/leaderboard"
+                variant="secondary"
+                className="justify-center"
+              >
+                Rangliste
+              </TTButton>
+            </div>
           }
         >
           <div className="tt-text text-xs font-black uppercase tracking-[0.3em] text-[var(--tt-text-muted)]">
@@ -372,9 +405,63 @@ export default function HomePage() {
         </TTToolbar>
 
         <LobbyLogo />
+        <TTPanel
+          title="Willkommen"
+          eyebrow=">> Spieler"
+          variant="magenta"
+        >
+          <div className="space-y-2">
+            <p className="tt-text text-lg font-black text-white">
+              Willkommen{displayPlayerName ? `, ${displayPlayerName}` : ""}!
+            </p>
+            <p className="text-sm text-[var(--tt-text-muted)]">
+              Lobbys, in denen du schon unterwegs warst, erreicht du über die Rangliste.
+            </p>
+          </div>
+          {resolvedLobbyId && (
+            <div className="mt-3 space-y-2" aria-live="polite" aria-busy={playersLoading}>
+              {playersLoading && (
+                <p className="flex items-center gap-2 text-sm text-[var(--tt-text-muted)]" role="status">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Zähle gerade alle Spieler …
+                </p>
+              )}
+              {playersError && (
+                <div className="tt-card border-[var(--tt-danger)] bg-red-950/50 text-sm text-white" role="alert">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span>Spielerliste klemmt – bitte kurz neu laden.</span>
+                    <TTButton type="button" variant="danger" size="md" onClick={retryLoadPlayers}>
+                      Noch mal laden
+                    </TTButton>
+                  </div>
+                </div>
+              )}
+              {isRejoinMode && !playersLoading && !playersError && (
+                <p className="text-sm text-[var(--tt-text-muted)]">
+                  Tipp: Wenn du denselben Tab nutzt, bist du sofort wieder drin. Ansonsten wird dein Name nach ca.
+                  30–45{"\u00a0"}Sekunden automatisch freigeschaufelt.
+                </p>
+              )}
+              {allPlayersStillActive && !playersLoading && !playersError && (
+                <p className="text-sm text-[var(--tt-danger)]">
+                  Alle Namen sind noch aktiv. Warte kurz oder greif zu dem Gerät, auf dem du zuletzt unterwegs warst.
+                </p>
+              )}
+              {playerListEmpty && (
+                <p className="text-sm text-[var(--tt-text-muted)]">Gerade keine Atze eingetragen.</p>
+              )}
+            </div>
+          )}
+        </TTPanel>
+
         <LobbyQuoteBox />
 
-        <ResumeGameCallout session={session} requireExplicitResume isConfirmed={resumeConfirmed} />
+        <ResumeGameCallout
+          session={session}
+          requireExplicitResume
+          isConfirmed={resumeConfirmed}
+          lobbyExists={session ? lobbies.some((l) => l.id === session.lobbyId) : false}
+        />
 
         <div className="grid gap-6">
           <TTPanel title="Gib Lobby" eyebrow=">> Neue Lobby" variant="cyan">
@@ -392,56 +479,6 @@ export default function HomePage() {
               {loading && <p role="status">Hole die Lobbys rein …</p>}
               {errorLoad && <p className="text-[var(--tt-danger)]">Ups, Fehlermeldung: {errorLoad}</p>}
             </div>
-          </TTPanel>
-
-          <TTPanel
-            title={isRejoinMode ? "Wer bist du?" : "Gib Name"}
-            eyebrow={isRejoinMode ? ">> Wieder rein" : ">> Neuer Atze"}
-            variant="magenta"
-          >
-            <LobbyDropdown
-              value={playerName}
-              onChange={setPlayerName}
-              options={playerOptions}
-              maxLen={MAX_PLAYER_NAME}
-              error={errPlayer}
-              placeholder={isRejoinMode ? "Name aus Liste picken" : "Boris Becken"}
-              disabled={isRejoinMode && (!resolvedLobbyId || playersLoading || !!playersError)}
-            />
-            {resolvedLobbyId && (
-              <div className="mt-3 space-y-2" aria-live="polite" aria-busy={playersLoading}>
-                {playersLoading && (
-                  <p className="flex items-center gap-2 text-sm text-[var(--tt-text-muted)]" role="status">
-                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    Zähle gerade alle Spieler …
-                  </p>
-                )}
-                {playersError && (
-                  <div className="tt-card border-[var(--tt-danger)] bg-red-950/50 text-sm text-white" role="alert">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span>Spielerliste klemmt – bitte kurz neu laden.</span>
-                      <TTButton type="button" variant="danger" size="md" onClick={retryLoadPlayers}>
-                        Noch mal laden
-                      </TTButton>
-                    </div>
-                  </div>
-                )}
-                {isRejoinMode && !playersLoading && !playersError && (
-                  <p className="text-sm text-[var(--tt-text-muted)]">
-                    Tipp: Wenn du denselben Tab nutzt, bist du sofort wieder drin. Ansonsten wird dein Name nach ca.
-                    30–45{"\u00a0"}Sekunden automatisch freigeschaufelt.
-                  </p>
-                )}
-                {allPlayersStillActive && !playersLoading && !playersError && (
-                  <p className="text-sm text-[var(--tt-danger)]">
-                    Alle Namen sind noch aktiv. Warte kurz oder greif zu dem Gerät, auf dem du zuletzt unterwegs warst.
-                  </p>
-                )}
-                {playerListEmpty && (
-                  <p className="text-sm text-[var(--tt-text-muted)]">Gerade keine Atze eingetragen.</p>
-                )}
-              </div>
-            )}
           </TTPanel>
 
           {isRejoinMode ? (
@@ -484,6 +521,11 @@ export default function HomePage() {
           {msg && (
             <p className="tt-text text-sm font-black text-[var(--tt-success)]" aria-live="polite" data-testid="home-status">
               {msg}
+            </p>
+          )}
+          {errPlayer && (
+            <p className="tt-text text-sm font-black text-[var(--tt-danger)]" aria-live="assertive">
+              {errPlayer}
             </p>
           )}
         </div>

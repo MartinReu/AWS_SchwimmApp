@@ -4,7 +4,7 @@
  * damit alte Deep-Links (z. B. /game, /lose) weiterhin in die modernen Lobby-/Round-Routen führen.
  */
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import HomePage from "./pages/HomePage";
 import GamePage from "./pages/GamePage";
 import LeaderboardPage from "./pages/LeaderboardPage";
@@ -12,6 +12,9 @@ import LosePage from "./pages/LosePage";
 import WinPage from "./pages/WinPage";
 import { loadSession } from "./utils/session";
 import { losePath, roundPath, winPath, withSearch } from "./utils/paths";
+import LoginPage from "./pages/LoginPage";
+import { usePlayerSession } from "./context/PlayerSessionContext";
+import { TransitionOverlayProvider } from "./context/TransitionOverlayContext";
 
 /**
  * Router-Einstiegspunkt der App.
@@ -20,29 +23,60 @@ import { losePath, roundPath, winPath, withSearch } from "./utils/paths";
  */
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/leaderboard" element={<LeaderboardPage />} />
-        <Route path="/lobby/:lobbyName">
-          <Route index element={<LobbyIndexRedirect />} />
-          <Route path="round">
-            <Route index element={<GamePage />} />
-            <Route path="lose" element={<LosePage />} />
-            <Route path=":roundNumber">
+    <TransitionOverlayProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* "/" rendert die HomePage (Lobby-Übersicht), "/login" ist ausschließlich der Erstbesuch-/Logout-Einstieg. */}
+          <Route path="/" element={<HomePageGate />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
+          <Route path="/lobby/:lobbyName">
+            <Route index element={<LobbyIndexRedirect />} />
+            <Route path="round">
               <Route index element={<GamePage />} />
               <Route path="lose" element={<LosePage />} />
+              <Route path=":roundNumber">
+                <Route index element={<GamePage />} />
+                <Route path="lose" element={<LosePage />} />
+              </Route>
             </Route>
+            <Route path="win" element={<WinPage />} />
           </Route>
-          <Route path="win" element={<WinPage />} />
-        </Route>
-        <Route path="/game" element={<LegacyGameRedirect />} />
-        <Route path="/lose" element={<LegacyLoseRedirect />} />
-        <Route path="/win" element={<LegacyWinRedirect />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          <Route path="/game" element={<LegacyGameRedirect />} />
+          <Route path="/lose" element={<LegacyLoseRedirect />} />
+          <Route path="/win" element={<LegacyWinRedirect />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </TransitionOverlayProvider>
   );
+}
+
+/**
+ * Prüft, ob bereits ein Spielername gesetzt ist.
+ * Ohne Namen erfolgt ein Redirect auf die LoginPage – außer wenn explizit der Rejoin-Modus aktiv ist.
+ */
+function HomePageGate() {
+  const location = useLocation();
+  const { isLoggedIn, confirmPlayerName, activeSession } = usePlayerSession();
+  const params = new URLSearchParams(location.search);
+  const isRejoinMode = params.get("mode") === "rejoin";
+  const sessionSeed = useMemo(() => loadSession(), []);
+  const hasStoredLobbySession = Boolean(
+    activeSession?.playerName?.trim() || sessionSeed?.playerName?.trim()
+  );
+
+  useEffect(() => {
+    if (!sessionSeed?.playerName || isLoggedIn) return;
+    // Hydriert den Context aus einer vorhandenen Lobby-Session, damit Reloads nicht auf Login zurückfallen.
+    confirmPlayerName(sessionSeed.playerName);
+  }, [confirmPlayerName, isLoggedIn, sessionSeed?.playerName]);
+
+  if (!hasStoredLobbySession && !isRejoinMode && !isLoggedIn) {
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  }
+
+  return <HomePage />;
 }
 
 /**

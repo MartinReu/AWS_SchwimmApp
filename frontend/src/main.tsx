@@ -7,6 +7,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+import { PlayerSessionProvider } from './context/PlayerSessionContext'
 
 /**
  * Erstellt eine React-Root-Instanz (Concurrency-Ready) und rendert App in StrictMode,
@@ -14,6 +15,8 @@ import './index.css'
  */
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <PlayerSessionProvider>
+      <App />
+    </PlayerSessionProvider>
   </React.StrictMode>,
 )

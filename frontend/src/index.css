@@ -40,3 +40,164 @@ body {
 /* Inputs: Platzhalter dezent, Caret in Blau */
 input::placeholder { color: color-mix(in oklab, var(--tt-blue) 55%, #5a5a5a); opacity: 1; }
 input { caret-color: var(--tt-blue); }
+
+/* === Login Intro Overlay === */
+.tt-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
+  padding: calc(var(--tt-safe-top) + 1.25rem) 1.25rem calc(var(--tt-safe-bottom) + 1.25rem);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(1px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+  --tt-overlay-scale: 0.85;
+}
+.tt-loading-overlay--visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.tt-loading-overlay__content {
+  width: min(100%, 720px);
+  margin-inline: auto;
+  padding: 0 1.25rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.tt-loading-overlay__box {
+  width: min(100%, 26rem);
+  margin-inline: auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+.tt-loading-overlay__logo {
+  width: clamp(180px, 35vw, 360px);
+  height: auto;
+  max-width: 100%;
+  filter:
+    drop-shadow(0 0 8px rgba(0, 0, 0, 0.7))
+    drop-shadow(0 0 20px rgba(0, 255, 255, 0.4));
+  transform: scale(var(--tt-overlay-scale));
+}
+.tt-loading-overlay--hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* === Login scroll intro === */
+.tt-login-scroll {
+  transform: translateY(0);
+  will-change: transform;
+}
+.tt-login-scroll--intro {
+  animation: tt-login-rise 3s cubic-bezier(0.2, 0.95, 0.3, 0.99) forwards;
+}
+
+@keyframes tt-login-rise {
+  0% {
+    transform: translateY(35vh);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-login-scroll--intro {
+    animation: none;
+    transform: translateY(0) !important;
+  }
+}
+
+@media (min-width: 520px) {
+  .tt-loading-overlay {
+    --tt-overlay-scale: 1;
+  }
+}
+@media (min-width: 640px) {
+  .tt-loading-overlay__content {
+    padding: 0 2rem;
+  }
+}
+@media (min-width: 900px) {
+  .tt-loading-overlay {
+    --tt-overlay-scale: 1.2;
+  }
+}
+
+/* === Bubble Transition (utility fallback, because Tailwind v4 ignores custom animations in config) === */
+@layer utilities {
+  @keyframes bubble-rise {
+    0% {
+      transform: translate(-50%, 20vh) scale(0.9);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -120vh) scale(1.06);
+      opacity: 1;
+    }
+  }
+  @keyframes bubble-overlay {
+    0% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes bubble-fade {
+    0% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* Base classes (for completeness) */
+  .animate-bubble-rise {
+    animation: bubble-rise var(--bubble-rise-duration, 1200ms) linear forwards;
+    will-change: transform, opacity;
+  }
+  .animate-bubble-overlay {
+    animation: bubble-overlay var(--bubble-overlay-duration, 1500ms) ease-out forwards;
+    will-change: opacity;
+  }
+  .animate-bubble-fade {
+    animation: bubble-fade 900ms ease-in-out forwards;
+  }
+
+  /* Respect prefers-reduced-motion like Tailwind's motion-safe/-reduce helpers */
+  @media (prefers-reduced-motion: no-preference) {
+    .motion-safe\:animate-bubble-rise {
+      animation: bubble-rise var(--bubble-rise-duration, 1200ms) linear forwards;
+      will-change: transform, opacity;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .motion-reduce\:animate-bubble-fade {
+      animation: bubble-fade 900ms ease-in-out forwards;
+    }
+  }
+}

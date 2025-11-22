@@ -316,6 +316,26 @@ app.get("/players",(req,res)=>{
 });
 
 /**
+ * GET /players/all-names
+ * Liefert eine eindeutige, alphabetisch sortierte Liste aller bisher bekannten Spieler:innen.
+ * Dient als Basis für den Login-Autocomplete, der perspektivisch auf eine GraphQL-Query gemappt wird.
+ */
+app.get("/players/all-names", (_req, res) => {
+  const seen = new Set();
+  const names = [];
+  db.players.forEach((player) => {
+    const cleaned = normLine(player.name);
+    if (!cleaned) return;
+    const normalized = cleaned.toLowerCase();
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    names.push(cleaned);
+  });
+  names.sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+  res.json({ names });
+});
+
+/**
  * POST /lobbies
  * Body: { name: string } mit Namenslänge 2-22 Zeichen.
  * Erstellt eine neue Lobby, setzt Status "open" und liefert das Objekt (201).

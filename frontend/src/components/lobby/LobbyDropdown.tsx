@@ -3,7 +3,7 @@
  * Wird auf der Home-Seite sowohl für Lobbynamen als auch Spielerauswahl genutzt.
  * Unterstützt freie Eingaben, Vorschläge mit Hinweisen und einfache Validierung.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { MutableRefObject, Ref, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 
 type DropdownOption =
@@ -30,6 +30,8 @@ type Props = {
   maxLen?: number;
   error?: string | null;
   disabled?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
+  openOnFocus?: boolean;
 };
 
 /** Teletext-Eingabefeld mit Dropdown/Filter, ideal für Lobby- und Spielernamen. */
@@ -41,12 +43,14 @@ export default function LobbyDropdown({
   maxLen = 22,
   error,
   disabled,
+  inputRef: externalInputRef,
+  openOnFocus = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const normalizedOptions = useMemo(() => options.map(normalizeOption), [options]);
 
   useEffect(() => {
@@ -64,7 +68,14 @@ export default function LobbyDropdown({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return normalizedOptions;
-    return normalizedOptions.filter((option) => option.label.toLowerCase().includes(q));
+    const startsWith: NormalizedOption[] = [];
+    const contains: NormalizedOption[] = [];
+    normalizedOptions.forEach((option) => {
+      const label = option.label.toLowerCase();
+      if (label.startsWith(q)) startsWith.push(option);
+      else if (label.includes(q)) contains.push(option);
+    });
+    return [...startsWith, ...contains];
   }, [normalizedOptions, query]);
   const normalizedValue = value.trim().toLowerCase();
 
@@ -108,11 +119,17 @@ export default function LobbyDropdown({
     <div className="relative space-y-1" ref={wrapRef} aria-expanded={open} aria-haspopup="listbox">
       <div className="grid grid-cols-[1fr_auto] gap-0">
         <input
-          ref={inputRef}
+          ref={(node) => {
+            inputRef.current = node;
+            assignRef(externalInputRef, node);
+          }}
           value={query}
           onChange={(e) => onInput(e.target.value)}
           onKeyDown={onKey}
-          onFocus={() => setIsFocused(true)}
+          onFocus={() => {
+            setIsFocused(true);
+            if (openOnFocus && !disabled) setOpen(true);
+          }}
           onBlur={() => setIsFocused(false)}
           placeholder={isFocused || query.trim().length > 0 ? "" : placeholder}
           maxLength={maxLen}
@@ -212,4 +229,13 @@ function normalizeOption(option: DropdownOption): NormalizedOption {
     disabled: Boolean(option.disabled),
     hint: option.hint,
   };
+}
+
+function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
+  if (!ref) return;
+  if (typeof ref === "function") {
+    ref(value);
+    return;
+  }
+  (ref as MutableRefObject<T | null>).current = value;
 }

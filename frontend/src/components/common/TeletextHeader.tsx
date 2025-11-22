@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /** Animierter Teletext-Header mit wechselnden Länder-Codes, Uhrzeit und Modusanzeige. */
-type Mode = "MAIN" | "GAME" | "WIN" | "LOSE" | "SCORES" ;
+type Mode = "LOGIN" | "MAIN" | "GAME" | "WIN" | "LOSE" | "SCORES" ;
 
 const COUNTRY_CODES = [
   "DE","AT","CH","FR","IT","ES","NL","BE","DK","SE","NO","FI","PL","CZ","HU","UK","IE","PT"

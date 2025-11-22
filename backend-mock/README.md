@@ -16,6 +16,7 @@ Optionale Variablen in `.env`:
 - Alle Endpunkte erwarten und liefern JSON.
 - Die Mock-DB ist nicht persistent. Tests sollten daher die nötigen Lobbys/Spieler neu anlegen.
 - Spieler- und Lobby-Namen werden mit `normLine` gereinigt (Trim + Mehrfach-Whitespace auf ein Leerzeichen reduziert).
+- Frontend schickt optional `clientSessionId` (localStorage, siehe LoginPage/Resume-Flow), damit Rejoins idempotent funktionieren (`IDEMPOTENT_JOIN=true` erlaubt Wiederbeitritt ohne Session-ID).
 
 ## API-Überblick
 
@@ -26,6 +27,7 @@ Optionale Variablen in `.env`:
   - Länge 2–22 Zeichen, Case-insensitiver Duplicate-Check, sonst `409`.
   - Response `201` mit `{ id, name, status: "open", createdAt }`.
 - `GET /players?lobbyId=<id>` – Liste öffentlicher Spieler (ohne Session-Daten). `404`, wenn Lobby fehlt.
+- `GET /players/all-names` – Deduplizierte Liste aller bekannten Spielernamen (alphabetisch). Grundlage für das Login-Autocomplete.
 - `POST /lobbies/:lobbyId/join` – Legacy-Variante, Response enthält nur das öffentliche Spielerobjekt.
 - `POST /lobbies/:lobbyId/join-or-rejoin` – Liefert die vollständige Payload `{ ok, mode, player, errorCode, message }`.
 - `POST /lobbies/by-name/:lobbyName/join-or-rejoin` – Wie oben, Lobby wird am Anzeigenamen gefunden.

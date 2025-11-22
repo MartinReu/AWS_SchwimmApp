@@ -35,6 +35,28 @@ export async function listPlayers(lobbyId: string): Promise<Player[]> {
   return parseJson(res);
 }
 
+type PlayerNamesResponse = { names?: string[] } | string[];
+
+/** Liefert eine deduplizierte Liste aller bekannten Spielernamen. */
+export async function fetchAllPlayerNames(): Promise<string[]> {
+  const res = await fetch(`${CORE_API_BASE_URL}/players/all-names`);
+  const payload = await parseJson<PlayerNamesResponse>(res);
+  const names = Array.isArray(payload) ? payload : Array.isArray(payload?.names) ? payload.names : [];
+  return normalizePlayerNameList(names);
+}
+
+/** Bereinigt und dedupliziert eine Liste von Spielernamen, stabilisiert die Sortierung. */
+function normalizePlayerNameList(raw: string[]): string[] {
+  const seen = new Map<string, string>();
+  raw.forEach((entry) => {
+    const trimmed = String(entry ?? "").trim();
+    if (!trimmed) return;
+    const normalized = trimmed.toLowerCase();
+    if (!seen.has(normalized)) seen.set(normalized, trimmed);
+  });
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+}
+
 export type DeleteLobbyParams = {
   lobbyId?: string;
   lobbyName?: string;
@@ -299,6 +321,10 @@ export async function deleteLobby({
   );
 }
 
+/**
+ * Erzeugt alle potenziellen Hard-Delete-Requests gegen Lobby- und Leaderboard-Endpunkte.
+ * Deckt ID- und Namensbasierte Routen sowie POST/DELETE-Varianten ab, um unterschiedliche Server-Implementierungen zu erreichen.
+ */
 function buildHardDeleteCandidates({ lobbyId, lobbyName }: { lobbyId?: string; lobbyName?: string }) {
   const candidates: RequestCandidate[] = [];
   const jsonHeaders = { "Content-Type": "application/json" };
@@ -559,6 +585,7 @@ function logDeleteWarning(
   });
 }
 
+/** Führt einen HTTP-Request aus und kapselt Timeout-/Abort-Handling. */
 async function performRequest(candidate: RequestCandidate, signal?: AbortSignal) {
   const { signal: requestSignal, cleanup, timedOut } = createAbortSignal(signal, REQUEST_TIMEOUT_MS);
   const baseUrl = candidate.baseUrl ?? LOBBIES_BASE_URL;
@@ -579,6 +606,10 @@ async function performRequest(candidate: RequestCandidate, signal?: AbortSignal)
   }
 }
 
+/**
+ * Kombiniert internen AbortController mit optionalem externen Signal plus Timeout,
+ * damit Delete-Versuche deterministisch abbrechen können.
+ */
 function createAbortSignal(externalSignal?: AbortSignal, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
   let timedOut = false;
@@ -614,6 +645,7 @@ function createAbortSignal(externalSignal?: AbortSignal, timeoutMs = REQUEST_TIM
   };
 }
 
+/** Kapselt Response-Payload in ein Error-Objekt inkl. optionaler errorCode-Zuweisung. */
 async function buildError(res: Response) {
   const fallback = `HTTP ${res.status}`;
   try {
