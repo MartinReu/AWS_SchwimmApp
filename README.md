@@ -1,148 +1,84 @@
-# Schwimm – Multiplayer-Kartenspiel (React + Vite)
+﻿# Schwimm – Multiplayer-Kartenspiel (React + Vite)
 
-Mobile-first Vite/React-Frontend mit Teletext-/8-Bit-Look für das Kartenspiel „Schwimm“. Das Projekt enthält ein Mock-Backend, mit dem alle Lobby-, Runden- und Leaderboard-Flows ohne externe Services getestet werden können.
+Teletext-/8-Bit-Kartenspiel "Schwimmen" mit React + Vite (Frontend) und einem Express-Mock-Backend. Lobby-basierter Mehrspieler-Flow mit Lives, Runden, Rangliste und Rejoin. Keine Secrets nötig; alles läuft lokal.
 
-## Repo-Status & Release-Eignung
-
-- Der gesamte Stack (Frontend + Mock-Backend) läuft lokal ohne Secrets oder Cloud-Ressourcen. Alle Konfigurationen erfolgen ausschließlich über `.env`-Dateien mit Dummy-Werten.
-- Das Mock-Backend liefert realistische REST-Endpunkte. Daten werden im Speicher gehalten und gehen beim Neustart verloren, was für lokale Entwicklung beabsichtigt ist.
-
-## Backend-Status
-
-- **Jetzt**: `backend-mock/server.js` simuliert das geplante AWS-Amplify/DynamoDB-Setup inkl. Lobby-/Rejoin-Logik, Leaderboard-REST-Endpunkten und optionaler SSE-Streams.
-- **Später**: Geplant ist ein echtes Backend auf Basis von AWS Amplify + AppSync (GraphQL) mit DynamoDB und Subscriptions für Presence/Leaderboard. Bis dahin bleiben Daten lokal/fake.
-
-## Tech Stack
-
-- React 18 + Vite 5 + TypeScript + Tailwind CSS für den Teletext-Stil.
-- Node.js + npm Workspaces (Frontend + `backend-mock`) zur gleichzeitigen Entwicklung.
-- Express + `nanoid` als Mock-Backend.
-- Lokale Doku unter `docs/` (z. B. `docs/game-logic.md` für Spiellogik).
+## Projektstruktur
+- `frontend/`: React + Vite + TypeScript + Tailwind, mobile-first UI im Teletext-Stil.
+- `backend-mock/`: Express-Server mit In-Memory-Daten (Lobbys, Spieler, Runden, Scores, Quotes, SSE/Polling).
+- `docs/`: Projekt-Dokumentation (z. B. `docs/game-logic.md`, `docs/TODOs.md`).
 
 ## Voraussetzungen
+- Node.js **>= 18**
+- npm **>= 9**
 
-- Node.js **>= 18** (Vite 5-Anforderung).
-- npm **>= 9** (Workspaces + Scripts).
+## Installation & Start
+1. Repo klonen und ins Verzeichnis wechseln.
+2. Beispiel-Umgebungen kopieren (keine Secrets enthalten):
+   ```bash
+   cp .env.example frontend/.env
+   cp backend-mock/.env.example backend-mock/.env
+   ```
+3. Abhängigkeiten installieren (Root-Workspace):
+   ```bash
+   npm install
+   ```
+4. Entwicklung starten:
+   ```bash
+   npm run dev            # Frontend + Mock-Backend parallel (localhost)
+   npm run dev:frontend   # nur Vite-Dev-Server
+   npm run dev:backend    # nur Mock-Backend auf Port 4000
+   ```
+5. Browser öffnen: `http://localhost:5173` (Mock-Backend: `http://localhost:4000`).
 
-## Installation & Entwicklung
+### LAN-Vorschau (optional)
+- Frontend + Backend im Heimnetz: `npm run dev:lan`
+- Nur Frontend im LAN: `npm run dev:frontend:lan`
+- Nach Build Vorschau im LAN: `npm run preview:lan`
 
-1. Repository klonen: `git clone <repo-url> schwimm-app && cd schwimm-app`
-2. Environment vorbereiten  
-   - `cp .env.example frontend/.env` (Frontend-Vars)  
-   - `cp backend-mock/.env.example backend-mock/.env` (Backend-Mock)
-3. Abhängigkeiten installieren: `npm install`
-4. Dev-Server starten  
-   - Komplett-Stack: `npm run dev` (startet Vite auf `http://localhost:5173` und Mock-Backend auf `http://localhost:4000`)  
-   - Nur Backend: `npm run dev:backend`  
-   - Nur Frontend: `npm run dev:frontend`
-5. Browser öffnen: `http://localhost:5173`
-
-> Die App ist vollständig lauffähig, solange das Mock-Backend läuft. Für spätere AWS-Integrationen sind keine Keys oder Amplify-Resourcen notwendig.
-
-### Verfügbare npm-Skripte
-
+## Nützliche Skripte
 | Script | Zweck |
 | --- | --- |
-| `npm run dev` | Startet Frontend & Mock-Backend parallel. |
-| `npm run dev:frontend` | Nur Vite-Dev-Server mit HMR. |
-| `npm run dev:backend` | Startet den Express-Mock auf Port 4000. |
+| `npm run dev` | Startet Vite-Frontend + Mock-Backend gleichzeitig. |
+| `npm run dev:frontend` / `npm run dev:frontend:lan` | Nur Frontend (localhost bzw. LAN). |
+| `npm run dev:backend` | Mock-Backend allein. |
 | `npm run build` | Produktionsbuild des Frontends. |
-| `npm run preview` | Vorschau des gebauten Frontends. |
+| `npm run preview` / `npm run preview:lan` | Vorschau des gebauten Frontends (localhost bzw. LAN). |
 | `npm run lint` | Platzhalter für künftige Lint-Regeln (Frontend). |
-| `npm run clean` | Entfernt sämtliche `node_modules` und Vite-Caches. |
+| `npm run clean` | Entfernt `node_modules` und Vite-Caches. |
 
-## Environment Variablen
-
-- Versionierte Templates: `.env.example`, `frontend/.env.example`, `backend-mock/.env.example`
-- Persönliche `.env`-Dateien niemals einchecken (`.gitignore` deckt `.env*` vollständig ab).
+## Environment-Variablen
+Versionierte Beispiele liegen als `.env.example` im Root, sowie in `frontend/` und `backend-mock/`.
 
 ### Frontend (Vite)
-
 | Variable | Beschreibung | Default |
 | --- | --- | --- |
-| `VITE_API_URL` | Basis-URL für alle REST-Endpoints (Mock oder echt). | `http://localhost:4000` |
-| `VITE_LOBBIES_API_URL` | Optionaler, dedizierter Lobby-Endpunkt (fällt auf `VITE_API_URL` zurück). | leer |
+| `VITE_API_URL` | Basis-URL für REST-Endpunkte (Mock oder echt). | `http://localhost:4000` |
+| `VITE_LOBBIES_API_URL` | Optionaler dedizierter Lobby-Endpunkt (Fallback: `VITE_API_URL`). | leer |
+| `VITE_LEADERBOARDS_API_URL` | Separater Leaderboard-Endpunkt; sonst `VITE_API_URL`. | leer |
+| `VITE_LEADERBOARDS_STREAM_URL` | SSE-/Stream-Endpunkt für Live-Leaderboards, sonst Polling. | leer |
 | `VITE_DEV_AUTO_BOOT` | `1` startet automatisch eine Dev-Lobby im Game-Flow. | `0` |
-| `VITE_LEADERBOARDS_API_URL` | Separater Leaderboard-Endpunkt; sonst wird `VITE_API_URL` genutzt. | leer |
-| `VITE_LEADERBOARDS_STREAM_URL` | SSE-/Stream-Endpunkt für Live-Leaderboards (fällt sonst auf Polling zurück). | leer |
 | `VITE_ENABLE_REJOIN_MODE` | Aktiviert Rejoin-spezifische UI. | `true` |
-| `VITE_ENABLE_PLAYERLIST_FIREWORKS` | Schaltet Pixel-Feuerwerke in Player-Listen. | `true` |
-| `VITE_ENABLE_PAGE_TRANSITIONS` | Zusätzliche Page-Transition-Effekte (konfigurierbar via `frontend/.env`). | `true` |
+| `VITE_ENABLE_PLAYERLIST_FIREWORKS` | Pixel-Feuerwerke in Player-Listen. | `true` |
+| `VITE_ENABLE_PAGE_TRANSITIONS` | Page-Transition-Effekte (Login/Seitenwechsel). | `true` |
 
 ### Backend-Mock (Express)
-
 | Variable | Beschreibung | Default |
 | --- | --- | --- |
 | `PORT` | Port des Mock-Backends. | `4000` |
-| `IDEMPOTENT_JOIN` | `true` erlaubt idempotente Join-Requests (z. B. bei Reloads). | `false` |
+| `IDEMPOTENT_JOIN` | `true` erlaubt idempotente Join-Requests bei gleichen Namen. | `false` |
 
-## Entwickler-Notizen
+## Architekturüberblick
+- **Frontend**: Seiten unter `frontend/src/pages` (Login, Home, Game, Leaderboard, Win, Lose). Teletext-Komponenten in `frontend/src/components/**`. Session/Resume via `localStorage`, Lives/Scores per REST, optionale SSE-Streams.
+- **Routing**: `/login`, `/` (Home), `/leaderboard`, `/lobby/:name/round[/ :number]/lose`, `/lobby/:name/win` plus Legacy-Redirects (`/game`, `/lose`, `/win`).
+- **Mock-Backend**: Express + `nanoid`; hält Lobbys/Spieler/Runden im RAM, bietet Join/Rejoin, Lives, Scores, Leaderboard, Quotes, SSE-Events (`/events`). Neustart setzt Daten zurück.
 
-- Teletext-/8-Bit-Design bleibt unangetastet: Komponenten (`TTButton`, `TTPanel`, `TTInput`, etc.) liegen unter `frontend/src/components/common`.
-- Mobile-first Layouts, optimiert für Touch, aber responsive bis Desktop.
-- Bis zu **acht Spieler** pro Lobby, Lives/Points werden über Pixelanzeiger und Slider gesteuert.
-- Lobby-/Spieler-Resume nutzt URL-Parameter + `localStorage`, Leaderboards bieten SSE & Polling.
-- Spieleridentitäten werden über `frontend/src/context/PlayerSessionContext.tsx` zentral gehalten und landen zusätzlich in `localStorage`, sodass LoginPage und HomePage denselben Namen teilen.
-- Visuelle Übergänge und Login-Intro steuert `frontend/src/context/TransitionOverlayContext.tsx` (Bubble-Overlay) plus `LoadingOverlay` auf der LoginPage; deaktivierbar über `VITE_ENABLE_PAGE_TRANSITIONS`.
-- Routing & Session: Erstbesuch führt nach `/login`, erfolgreiche Logins werden unter `localStorage`-Key `schwimm_player_session` (inkl. Spielernamen + optionaler Lobby-Info) abgelegt. Solange eine Session existiert, bleiben Reloads und Home-Links auf `/`, ein direkter Aufruf von `/login` wird auf die HomePage umgeleitet. Logout bzw. leeres Storage zeigt wieder die LoginPage.
-- API-Schnittstellen können sich ändern, sobald das echte Amplify-Backend erreichbar ist. Mock-Endpunkte spiegeln aber schon jetzt die geplanten Routen.
+## Manuelle Checks
+- `npm run build` (oder `npm run lint`) sollte ohne TypeScript-Fehler durchlaufen.
+- Login → Lobby → Spiel → Lose/Win → Leaderboard durchklicken; Rejoin von `/leaderboard` oder gespeicherter Session testen.
+- Kommentare stichprobenartig prüfen: Kopfkommentare pro Datei, deutschsprachige Abschnittskommentare, keine veralteten TODOs im Code.
+- Offene TODOs stehen unter `docs/TODOs.md`.
 
-### Architektur-Überblick
-
-- **Frontend**  
-  - Seiten unter `frontend/src/pages` (u. a. `HomePage`, `GamePage`, `LeaderboardPage`, `WinPage`, `LosePage`).  
-  - Gemeinsame Layout-/Teletext-Komponenten in `frontend/src/components/common`.  
-  - Feature-spezifische UI unter `frontend/src/components/game` und `frontend/src/components/lobby`.  
-  - API-Layer: `frontend/src/api` aggregiert `lobbies`, `game`, `quotes`, `leaderboards`; `frontend/src/api/http.ts` hält Defaults.  
-  - State via Hooks, `localStorage` für Session/Resume, SSE/Polling für Live-Daten.  
-  - Styles unter `frontend/src/styles`.
-- **Mock-Backend**  
-  - `backend-mock/server.js` nutzt Express + In-Memory-DB für Lobbies, Spieler, Runden, Scores und Lives.  
-  - Simuliert Join/Rejoin, Leaderboard-Löschungen, Hard/Soft-Delete und Presence-Pings.  
-  - Keine externen Ressourcen; Neustart setzt Daten zurück.
-
-### Spiel- & Lobby-Flows
-
-- Einstieg erfolgt über `/login` (`frontend/src/pages/LoginPage.tsx`). Die Seite lädt bekannte Spielernamen via `api.fetchAllPlayerNames()` (Mock-Route `GET /players/all-names`), setzt den Wert im PlayerSessionContext und navigiert anschließend zur HomePage.
-- `/` bleibt die HomePage, leitet aber automatisch auf `/login` um, sofern kein Spielername gesetzt ist (im Rejoin-Modus `?mode=rejoin` bleibt der Direktzugriff erhalten).
-- Lobby anlegen, Spieler joinen oder per Resume-Key reaktivieren (max. 8 Spieler).  
-- Slider beendet Runden, Lives werden via Pixel-Sticks gemeldet; „Schwimmst“ blockiert Spieler bis zum Lose-Screen.  
-- Leaderboard zeigt aggregierte Scores inkl. Statusmeldungen/Fehlertexte und Rejoin-Shortcuts.  
-- Routing: `/`, `/leaderboard`, `/lobby/:name/round`, `/lobby/:name/round/:number/lose`, `/lobby/:name/win` sowie Legacy-Pfade (`/game`, `/lose`, `/win`) mit Redirects.  
-- Ausführliche Doku befindet sich in `docs/game-logic.md`.
-
-### Manuelle Smoke-Tests
-
-1. **Login-Flow** – App aufrufen, LoginPage sehen, bestehenden oder neuen Namen wählen und bestätigen. Danach sollte die HomePage direkt mit dem gewählten Namen erscheinen.  
-2. **Spielername merken** – Nach dem Login reloaden: HomePage bleibt zugänglich und übernimmt den gespeicherten Namen automatisch.  
-3. **Rejoin-Flow** – Lobby erstellen, Spieler verbinden, Browser neu laden und erneut joinen: Spieler-ID bleibt stabil, Game öffnet sich automatisch.  
-4. **Lobby-Dropdown & A11y** – Dropdown öffnen, Fokus/Keyboard testen (`aria-busy`, Hover-Ringe).  
-5. **Runde beenden/Winner** – Slider ziehen, Backend bestätigt Gewinner, `/lobby/:name/win` zeigt Ergebnis.  
-6. **Lose-Screen** – „Schwimmst“ triggern, Lose-Route wird aktiv, Neustart führt zurück in die Runde.  
-7. **Routing & Deep-Linking** – Direkt `/lobby/<name>/round/<number>` oder Legacy-URL aufrufen; Zustand wird rekonstruiert.  
-8. **Leaderboard-Statusmeldungen** – Laden, Fehlerfälle und leere Suchergebnisse prüfen; SSE aktivieren, falls `VITE_LEADERBOARDS_STREAM_URL` gesetzt ist.
-
-## Roadmap / Backend
-
-- Zielarchitektur: AWS Amplify + AppSync (GraphQL) + DynamoDB + GraphQL Subscriptions/SSE für Präsenz.  
-- Amplify-Infrastruktur liefert künftig persistente Daten, echtes Matchmaking und Server-Side Validation.  
-- Bis dahin reicht das Mock-Backend für lokale Entwicklung; keine AWS-Ressourcen oder Keys werden benötigt.
-
-## Git / GitHub
-
-1. `git init`
-2. `git add . && git commit -m "chore: initial import"`
-3. `git remote add origin <github-url>`
-4. `git push -u origin main`
-
-> `.gitignore` deckt `node_modules`, Builds, Logs und sämtliche `.env*` ab. Bitte `.env`-Dateien ausschließlich lokal halten oder via Secrets-Store in CI bereitstellen.
-
-## Lizenz & Contributing
-
-- Martin hats geschrieben!
-
-## Zusätzliche Ressourcen
-
+## Weiterführende Doku
 - Spiellogik & Flows: `docs/game-logic.md`
-- Mock-Backend-Details: `backend-mock/README.md`
-- Teletext-Komponenten & Layouts: siehe `frontend/src/components/**`
+- Mock-Server-Details: `backend-mock/README.md`
+- Offene Aufgaben: `docs/TODOs.md`

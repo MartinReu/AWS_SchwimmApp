@@ -4,7 +4,7 @@
  * dass Login- und Lobby-Flows denselben Wert teilen (inkl. localStorage-Persistenz).
  */
 import { createContext, PropsWithChildren, useCallback, useContext, useMemo, useState } from "react";
-import { clearSession, loadSession } from "../utils/session";
+import { clearSession, loadSession, MAX_SESSION_AGE_MS, resetInitialLoginRequirement } from "../utils/session";
 
 export type StoredPlayerSession = {
   playerName: string;
@@ -22,6 +22,7 @@ type PlayerSessionContextValue = {
   isLoggedIn: boolean;
   activeSession: StoredPlayerSession | null;
   clearCurrentPlayerName: () => void;
+  clearLobbySession?: (lobbyName?: string | null) => void;
   logout: () => void;
 };
 
@@ -67,7 +68,8 @@ export function PlayerSessionProvider({ children }: PropsWithChildren) {
         window.localStorage.removeItem(PLAYER_SESSION_STORAGE_KEY);
         return;
       }
-      window.localStorage.setItem(PLAYER_SESSION_STORAGE_KEY, JSON.stringify(next));
+      const normalized = normalizePlayerSession(next);
+      window.localStorage.setItem(PLAYER_SESSION_STORAGE_KEY, JSON.stringify(normalized));
     } catch {
       /* ignore storage issues */
     }
@@ -90,7 +92,7 @@ export function PlayerSessionProvider({ children }: PropsWithChildren) {
           lobbyId: playerSession?.lobbyId,
           lobbyName: playerSession?.lobbyName,
           resumeKey: playerSession?.resumeKey,
-          lastLoginAt: playerSession?.lastLoginAt ?? Date.now(),
+          lastLoginAt: Date.now(),
         };
         persistPlayerSession(nextSession);
       }
@@ -135,9 +137,29 @@ export function PlayerSessionProvider({ children }: PropsWithChildren) {
     setHasConfirmedPlayer(false);
   }, [applyPlayerName, persistPlayerSession]);
 
+  const clearLobbySession = useCallback(
+    (lobbyName?: string | null) => {
+      const existingName = playerSession?.playerName || currentPlayerName || null;
+      if (!existingName) {
+        persistPlayerSession(null);
+        return;
+      }
+      const next: StoredPlayerSession = {
+        playerName: existingName,
+        lobbyId: null,
+        lobbyName: lobbyName ? lobbyName.toUpperCase() : null,
+        resumeKey: null,
+        lastLoginAt: Date.now(),
+      };
+      persistPlayerSession(next);
+    },
+    [currentPlayerName, persistPlayerSession, playerSession?.playerName]
+  );
+
   const logout = useCallback(() => {
     clearCurrentPlayerName();
     clearSession();
+    resetInitialLoginRequirement();
   }, [clearCurrentPlayerName]);
 
   const value = useMemo<PlayerSessionContextValue>(
@@ -146,12 +168,13 @@ export function PlayerSessionProvider({ children }: PropsWithChildren) {
       setCurrentPlayerName,
       confirmPlayerName,
       hasConfirmedPlayer,
-      isLoggedIn: Boolean(playerSession?.playerName),
+      isLoggedIn: isPlayerSessionFresh(playerSession),
       activeSession: playerSession,
       clearCurrentPlayerName,
+      clearLobbySession,
       logout,
     }),
-    [clearCurrentPlayerName, confirmPlayerName, currentPlayerName, hasConfirmedPlayer, logout, playerSession, setCurrentPlayerName]
+    [clearCurrentPlayerName, clearLobbySession, confirmPlayerName, currentPlayerName, hasConfirmedPlayer, logout, playerSession, setCurrentPlayerName]
   );
 
   return <PlayerSessionContext.Provider value={value}>{children}</PlayerSessionContext.Provider>;
@@ -201,13 +224,15 @@ function readStoredPlayerSession(): StoredPlayerSession | null {
     if (!parsed || typeof parsed.playerName !== "string") return null;
     const trimmedName = parsed.playerName.trim().toUpperCase();
     if (!trimmedName) return null;
-    return {
+    const normalized: StoredPlayerSession = {
       playerName: trimmedName,
       lobbyId: parsed.lobbyId ?? null,
-      lobbyName: parsed.lobbyName ?? null,
+      lobbyName: typeof parsed.lobbyName === "string" && parsed.lobbyName.trim().length > 0 ? parsed.lobbyName.toUpperCase() : null,
       resumeKey: parsed.resumeKey ?? null,
       lastLoginAt: typeof parsed.lastLoginAt === "number" && !Number.isNaN(parsed.lastLoginAt) ? parsed.lastLoginAt : Date.now(),
     };
+    if (!isPlayerSessionFresh(normalized)) return null;
+    return normalized;
   } catch {
     return null;
   }
@@ -231,4 +256,19 @@ function canUseStorage() {
   } catch {
     return false;
   }
+}
+
+function isPlayerSessionFresh(session: StoredPlayerSession | null) {
+  if (!session?.lastLoginAt) return false;
+  return Date.now() - session.lastLoginAt <= MAX_SESSION_AGE_MS;
+}
+
+function normalizePlayerSession(session: StoredPlayerSession): StoredPlayerSession {
+  return {
+    playerName: session.playerName.toUpperCase(),
+    lobbyId: session.lobbyId ?? null,
+    lobbyName: session.lobbyName ? session.lobbyName.toUpperCase() : null,
+    resumeKey: session.resumeKey ?? null,
+    lastLoginAt: typeof session.lastLoginAt === "number" && !Number.isNaN(session.lastLoginAt) ? session.lastLoginAt : Date.now(),
+  };
 }

@@ -24,7 +24,8 @@ export type LobbySessionInput = Omit<LobbySession, "updatedAt">;
 
 const STORAGE_KEY = "schwimm_session_v1";
 const CLIENT_SESSION_STORAGE_KEY = "schwimm_client_session_id_v1";
-const MAX_SESSION_AGE_MS = 1000 * 60 * 60 * 6; // 6 Stunden: verhindert alte Cache-Sessions beim Ersteinstieg
+export const MAX_SESSION_AGE_MS = Number.POSITIVE_INFINITY; // Kein automatisches Verfallen mehr
+const INITIAL_LOGIN_FLAG = "schwimm_require_login_once";
 
 /**
  * Liest die zuletzt persistierte Lobby-Session aus localStorage.
@@ -44,11 +45,14 @@ export function loadSession(): LobbySession | null {
     ) {
       return null;
     }
-    const ageOk = typeof parsed.updatedAt === "number" && Date.now() - parsed.updatedAt <= MAX_SESSION_AGE_MS;
+    const parsedUpdatedAt =
+      typeof parsed.updatedAt === "number" && !Number.isNaN(parsed.updatedAt)
+        ? parsed.updatedAt
+        : Date.now();
     const clientSessionId =
       typeof parsed.clientSessionId === "string" && parsed.clientSessionId.trim().length > 0
-        ? parsed.clientSessionId
-        : undefined;
+        ? parsed.clientSessionId.trim()
+        : readStoredClientSessionId() || undefined;
     const resumeEligible =
       typeof parsed.resumeEligible === "boolean" ? parsed.resumeEligible : undefined;
     const resumeView =
@@ -62,8 +66,17 @@ export function loadSession(): LobbySession | null {
         ? null
         : undefined;
     const playerName = parsed.playerName.toUpperCase();
-    if (!ageOk) return null;
-    return { ...parsed, clientSessionId, resumeEligible, resumeView, resumeRoundNumber, playerName };
+    const lobbyName = parsed.lobbyName.toUpperCase();
+    return {
+      ...parsed,
+      lobbyName,
+      clientSessionId,
+      resumeEligible,
+      resumeView,
+      resumeRoundNumber,
+      playerName,
+      updatedAt: parsedUpdatedAt,
+    };
   } catch {
     return null;
   }
@@ -76,14 +89,8 @@ export function loadSession(): LobbySession | null {
 export function storeSession(next: LobbySessionInput | LobbySession) {
   if (!safeStorage()) return;
   try {
-    const payload: LobbySession =
-      "updatedAt" in next && typeof next.updatedAt === "number"
-        ? ({ ...(next as LobbySession), playerName: next.playerName.toUpperCase() })
-        : { ...(next as LobbySessionInput), playerName: next.playerName.toUpperCase(), updatedAt: Date.now() };
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(payload)
-    );
+    const payload = normalizeSessionPayload(next);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
     /* ignore write errors */
   }
@@ -96,7 +103,7 @@ export function storeSession(next: LobbySessionInput | LobbySession) {
 export function updateSession(partial: Partial<LobbySessionInput>): LobbySession | null {
   const current = loadSession();
   if (!current) return null;
-  const merged = { ...current, ...partial, updatedAt: Date.now() };
+  const merged = normalizeSessionPayload({ ...current, ...partial, updatedAt: Date.now() });
   storeSession(merged);
   return merged;
 }
@@ -112,17 +119,64 @@ export function clearSession() {
 }
 
 /**
+ * Setzt bei einem frischen Tab/Reload das Flag, dass zuerst die Login-Seite gezeigt werden soll.
+ * Gibt true zurück, wenn ein initialer Login noch erforderlich ist.
+ */
+export function seedInitialLoginRequirement(): boolean {
+  if (!safeSessionStorage()) return false;
+  const current = sessionStorage.getItem(INITIAL_LOGIN_FLAG);
+  if (current === null) {
+    sessionStorage.setItem(INITIAL_LOGIN_FLAG, "1");
+    return true;
+  }
+  return current !== "0";
+}
+
+/** Prüft, ob der aktuelle Tab noch einen expliziten Login-Durchlauf benötigt. */
+export function isInitialLoginRequired(): boolean {
+  if (!safeSessionStorage()) return false;
+  return sessionStorage.getItem(INITIAL_LOGIN_FLAG) !== "0";
+}
+
+/** Markiert, dass der Login bewusst abgeschlossen wurde und Resume wieder erlaubt ist. */
+export function markInitialLoginComplete() {
+  if (!safeSessionStorage()) return;
+  sessionStorage.setItem(INITIAL_LOGIN_FLAG, "0");
+}
+
+/** Erzwingt erneut den Login-Gate (z. B. nach Logout). */
+export function resetInitialLoginRequirement() {
+  if (!safeSessionStorage()) return;
+  sessionStorage.setItem(INITIAL_LOGIN_FLAG, "1");
+}
+
+/**
  * Liefert eine eindeutige Client-Session-ID (persistiert), erzeugt falls nötig eine neue.
  * Wird z. B. im Backend-Join (processJoinOrRejoin) genutzt, um Rejoins wiederzuerkennen.
  */
 export function getClientSessionId(): string | null {
   if (!safeStorage()) return null;
   try {
-    const existing = localStorage.getItem(CLIENT_SESSION_STORAGE_KEY);
+    const existing = readStoredClientSessionId();
     if (existing) return existing;
     const next = generateClientSessionId();
-    localStorage.setItem(CLIENT_SESSION_STORAGE_KEY, next);
+    persistClientSessionId(next);
     return next;
+  } catch {
+    return null;
+  }
+}
+
+export function persistClientSessionId(nextId: string | null): string | null {
+  if (!safeStorage()) return null;
+  try {
+    if (!nextId || !nextId.trim()) {
+      localStorage.removeItem(CLIENT_SESSION_STORAGE_KEY);
+      return null;
+    }
+    const trimmed = nextId.trim();
+    localStorage.setItem(CLIENT_SESSION_STORAGE_KEY, trimmed);
+    return trimmed;
   } catch {
     return null;
   }
@@ -140,6 +194,26 @@ function safeStorage() {
   }
 }
 
+function readStoredClientSessionId(): string | null {
+  if (!safeStorage()) return null;
+  try {
+    const raw = localStorage.getItem(CLIENT_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSessionStorage() {
+  try {
+    return typeof window !== "undefined" && "sessionStorage" in window;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Erzeugt eine zufällige Session-ID.
  * Nutzt bevorzugt crypto.randomUUID; fällt ansonsten auf einen pseudozufälligen String zurück.
@@ -149,4 +223,16 @@ function generateClientSessionId() {
     return crypto.randomUUID();
   }
   return `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
+function normalizeSessionPayload(next: LobbySessionInput | LobbySession): LobbySession {
+  const base: LobbySession =
+    "updatedAt" in next && typeof (next as LobbySession).updatedAt === "number"
+      ? ({ ...(next as LobbySession) })
+      : ({ ...(next as LobbySessionInput), updatedAt: Date.now() });
+  return {
+    ...base,
+    lobbyName: base.lobbyName.toUpperCase(),
+    playerName: base.playerName.toUpperCase(),
+  };
 }

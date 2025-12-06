@@ -3,7 +3,7 @@
  * Diese werden in API-Modulen und UI-Komponenten gemeinsam verwendet.
  */
 export type Lobby = { id: string; name: string; createdAt: string; status: "open" | "active" | "closed" };
-export type Player = { id: string; name: string; lobbyId: string; joinedAt: string; isActive?: boolean };
+export type Player = { id: string; name: string; lobbyId: string; joinedAt: string; isActive?: boolean; lastSeen?: string | null };
 export type Quote = { id: string; text: string; createdAt: string };
 
 export type Round = {

@@ -17,6 +17,7 @@ type Props = {
   className?: string;
   currentPlayerId?: string;
   currentPlayerName?: string;
+  leaderCelebrationKey?: number;
 };
 
 const FIREWORKS_ENABLED = (import.meta.env.VITE_ENABLE_PLAYERLIST_FIREWORKS ?? "true") !== "false";
@@ -33,6 +34,7 @@ export default function GamePlayerList({
   className,
   currentPlayerId,
   currentPlayerName,
+  leaderCelebrationKey,
 }: Props) {
   const { prefersReducedMotion } = usePixelFirework();
   const canRenderFirework = FIREWORKS_ENABLED;
@@ -63,81 +65,84 @@ export default function GamePlayerList({
     return sorted;
   }, [players, scoreLookup]);
 
+  // Bestimmt die/das führende:n Spieler:in für das Teletext-Feuerwerk (nur visuelle Markierung, keine Logikänderung).
+  const leaderId = playersSorted[0]?.id ?? null;
   const shouldScroll = playersSorted.length > maxVisible;
   const overflowCount = shouldScroll ? playersSorted.length - maxVisible : 0;
   const scrollVars: PlayerListVars = { "--playerlist-visible": String(maxVisible) };
+  const leaderFireKey = leaderCelebrationKey ?? 0;
 
   return (
-    <div className={clsx(className)}>
-      <div
-        className={clsx(
-          "playerlist-grid",
-          shouldScroll && "playerlist-scrollable"
-        )}
-        style={scrollVars}
-      >
-        {playersSorted.map((p, i) => {
-          const playerScore = scoreLookup.get(p.id) ?? 0;
-          const displayName = p.name.toUpperCase();
-          const isSelf =
-            (myPlayerId && p.id === myPlayerId) || (myPlayerName && displayName.localeCompare(myPlayerName, undefined, { sensitivity: "accent" }) === 0);
-          const isLeader = i === 0;
+    <div className={clsx("w-full", className)}>
+      <div className="border-4 border-[var(--tt-primary,#00ffff)] bg-[var(--tt-panel,#0c0c0c)] p-2 sm:p-3 shadow-[0_6px_0_rgba(0,0,0,0.85)]">
+        <div
+          className={clsx(
+            "playerlist-grid",
+            shouldScroll && "playerlist-scrollable"
+          )}
+          style={scrollVars}
+        >
+          {playersSorted.map((p, i) => {
+            const playerScore = scoreLookup.get(p.id) ?? 0;
+            const displayName = p.name.toUpperCase();
+            const isSelf =
+              (myPlayerId && p.id === myPlayerId) || (myPlayerName && displayName.localeCompare(myPlayerName, undefined, { sensitivity: "accent" }) === 0);
+            const isLeader = leaderId ? p.id === leaderId : i === 0;
 
-          return (
-            <div
-              key={p.id}
-              className={clsx(
-                "playerlist-item relative grid grid-cols-[auto_1fr_auto] items-stretch border-4 border-black bg-[var(--tt-yellow,#faff00)] shadow-[0_4px_0_#111] transition-shadow duration-150",
-                isSelf && "ring-4 ring-blue-500/70 ring-offset-2 ring-offset-[var(--tt-yellow,#faff00)]"
-              )}
-              aria-current={isSelf ? "true" : undefined}
-            >
-              {isSelf && (
-                <span className="pointer-events-none absolute inset-1 border-2 border-blue-500/70 rounded-sm z-10" aria-hidden="true" />
-              )}
-
-              {/* Linke Index-Leiste (blau, Teletext-Pfeil) */}
-              <div className="relative bg-[var(--tt-blue,#0e4aff)] text-white tt-text px-2 py-2 min-w-[62px] text-lg border-r-4 border-black flex h-full items-center overflow-hidden">
-                {isLeader && canRenderFirework && (
-                  <PixelFireworkRing
-                    aria-hidden="true"
-                    staticOnly={prefersReducedMotion}
-                    loop={!prefersReducedMotion}
-                    className="pointer-events-none absolute left-0 top-0 h-full w-full"
-                    style={{
-                      transform: "scale(0.8)",
-                      transformOrigin: "top left",
-                    }}
-                  />
-                )}
-                <span className="relative z-10 mr-1">{">"}</span>
-                <span className="relative z-10 tabular-nums">{String(i + 1).padStart(2, "0")}</span>
-              </div>
-
-              {/* Name */}
+            return (
               <div
+                key={p.id}
                 className={clsx(
-                  "tt-text text-[18px] text-black flex items-center px-3",
-                  isSelf && "bg-[#e8f0ff] font-semibold text-[#0e4aff]"
+                  "playerlist-item relative overflow-visible border-4 border-[var(--tt-yellow,#faff00)] bg-black shadow-[0_6px_0_rgba(0,0,0,0.9)] transition-shadow duration-150"
                 )}
+                aria-current={isSelf ? "true" : undefined}
               >
-                {displayName}
-              </div>
+                <div className="grid h-full grid-cols-[auto_1fr_auto] divide-x-[4px] divide-black">
+                  {/* Linke Index-Leiste (blau, Teletext-Pfeil) */}
+                  <div className="relative bg-[var(--tt-blue,#0e4aff)] text-white tt-text px-3 py-2 min-w-[62px] sm:min-w-[68px] text-base sm:text-lg flex h-full items-center overflow-visible leading-tight shadow-[inset_0_0_0_2px_rgba(0,0,0,0.45)]">
+                    {isLeader && canRenderFirework && (
+                      <>
+                        <PixelFireworkRing
+                          aria-hidden="true"
+                          staticOnly={prefersReducedMotion}
+                          loop={!prefersReducedMotion}
+                          loopIntervalMs={1400}
+                          variant="single"
+                          className="pointer-events-none absolute left-1 top-1/2 h-12 w-12 -translate-y-1/2 sm:left-2 sm:h-14 sm:w-14"
+                          style={{ transformOrigin: "center" }}
+                          key={`${leaderFireKey}-${p.id}`}
+                        />
+                        <span className="sr-only">Führende:r Spieler:in</span>
+                      </>
+                    )}
+                    <span className="relative z-10 mr-1">{">"}</span>
+                    <span className="relative z-10 tabular-nums">{String(i + 1).padStart(2, "0")}</span>
+                  </div>
 
-              {/* Score rechts */}
-              <div className="bg-black text-[#b6ff00] tt-text px-3 min-w-[58px] flex h-full items-center justify-center border-l-4 border-black">
-                <span className="tabular-nums">
-                  {String(playerScore).padStart(2, "0")}
-                </span>
+                  <div
+                    className={clsx(
+                      "tt-text text-[16px] sm:text-[18px] text-[var(--tt-secondary,#faff00)] flex items-center px-3 py-2 leading-snug bg-[var(--tt-panel,#0c0c0c)]",
+                      isSelf && "bg-[var(--tt-panel,#0c0c0c)] font-semibold text-white"
+                    )}
+                  >
+                    {displayName}
+                  </div>
+
+                  <div className="bg-black text-[#b6ff00] tt-text px-3 py-2 min-w-[58px] sm:min-w-[66px] flex h-full items-center justify-center text-base sm:text-lg leading-tight shadow-[inset_0_0_0_2px_rgba(0,0,0,0.65)]">
+                    <span className="tabular-nums whitespace-nowrap">
+                      {String(playerScore).padStart(2, "0")}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {overflowCount > 0 && (
         <div className="mt-2 text-white/80 text-sm tt-text">
-          +{overflowCount} weitere Spieler (scrollen)
+          +{overflowCount} schau, mehr Atzen (scrollen)
         </div>
       )}
     </div>

@@ -89,3 +89,9 @@
 .pf-root--static .pf-f { transform: translate(-24px, 18px); }
 .pf-root--static .pf-g { transform: translate(0px, 26px); }
 .pf-root--static .pf-h { transform: translate(24px, 18px); }
+
+.pf-root--loop .pf-dot,
+.pf-root--loop .pf-center {
+  animation-iteration-count: infinite;
+  animation-play-state: running;
+}

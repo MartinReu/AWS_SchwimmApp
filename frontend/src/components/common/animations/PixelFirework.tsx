@@ -16,6 +16,7 @@ export type PixelFireworkRingProps = {
   loop?: boolean;
   loopIntervalMs?: number;
   intensity?: "normal" | "dense";
+  variant?: "full" | "single";
 };
 
 /** Multi-burst pixel firework ring used by EndRoundSlider und GamePlayerList. */
@@ -28,6 +29,7 @@ export function PixelFireworkRing({
   loop = false,
   loopIntervalMs = 1400,
   intensity = "normal",
+  variant = "full",
 }: PixelFireworkRingProps) {
   const [loopKey, setLoopKey] = useState(0);
 
@@ -47,6 +49,10 @@ export function PixelFireworkRing({
       { offset: { x: -36, y: 0 }, scale: 0.85, delayMs: delayMs + 220, palette: oceanPalette() },
     ];
 
+    if (variant === "single") {
+      return base.slice(0, 1);
+    }
+
     if (intensity === "dense") {
       base.push(
         { offset: { x: -8, y: -32 }, scale: 1.1, delayMs: delayMs + 260, palette: rainbowPalette() },
@@ -57,7 +63,7 @@ export function PixelFireworkRing({
     }
 
     return base;
-  }, [delayMs, intensity]);
+  }, [delayMs, intensity, variant]);
 
   return (
     <div className={clsx(className)} style={style} aria-hidden={ariaHidden}>
@@ -74,6 +80,7 @@ export function PixelFireworkRing({
             colors={burst.palette}
             delayMs={burst.delayMs}
             staticOnly={staticOnly}
+            loop={loop && !staticOnly}
           />
         </div>
       ))}
@@ -92,10 +99,11 @@ type PixelFireworkProps = {
   colors: string[];
   delayMs?: number;
   staticOnly?: boolean;
+  loop?: boolean;
 };
 
 /** Einzelnes Feuerwerk bestehend aus neun Pixel-Sprites, die radial auseinanderfliegen. */
-function PixelFirework({ colors, delayMs = 0, staticOnly = false }: PixelFireworkProps) {
+function PixelFirework({ colors, delayMs = 0, staticOnly = false, loop = false }: PixelFireworkProps) {
   const duration = "920ms";
   const delay = `${delayMs}ms`;
 
@@ -107,7 +115,7 @@ function PixelFirework({ colors, delayMs = 0, staticOnly = false }: PixelFirewor
   });
 
   return (
-    <div className={clsx("pf-root", staticOnly && "pf-root--static")}>
+    <div className={clsx("pf-root", staticOnly && "pf-root--static", loop && "pf-root--loop")}>
       <span className="pf-dot pf-center" style={styleFor(0)} />
       <span className="pf-dot pf-a" style={styleFor(1)} />
       <span className="pf-dot pf-b" style={styleFor(2)} />

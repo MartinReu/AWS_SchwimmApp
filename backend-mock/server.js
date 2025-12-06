@@ -1,9 +1,9 @@
-/**
+﻿/**
  * Mock-Backend für die Schwimm-App.
  * Dieser Express-Server wird von der lokalen Vite-Frontend-App konsumiert, um Lobby-, Runden- und Leaderboard-Daten bereitzustellen.
  * Dient als In-Memory-Ersatz für echte Services, damit sich das Frontend über REST-Endpunkte mit realistischen Szenarien verbinden kann.
  */
-// Framework / Utility Imports -------------------------------------------------
+// Framework- und Utility-Importe -------------------------------------------------
 // express: HTTP-Routing, cors: Browser-Zugriffe erlauben, nanoid: kurze IDs, dotenv: .env laden
 import express from "express";
 import cors from "cors";
@@ -15,7 +15,8 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
-const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT || 4000);
+const MAX_PORT_RETRY = 10;
 
 const MAX_LOBBY_NAME = 22;
 const MAX_PLAYER_NAME = 18;
@@ -24,16 +25,22 @@ const IDEMPOTENT_JOIN = String(process.env.IDEMPOTENT_JOIN || "").toLowerCase() 
 const LOBBY_FULL_MESSAGE = "Lobby ist voll (max. 8 Spieler). Rejoin nur möglich, wenn dein Name inaktiv ist.";
 const NAME_ACTIVE_MESSAGE = "Dieser Name ist bereits aktiv angemeldet.";
 const NAME_TAKEN_MESSAGE = "Name existiert bereits in dieser Lobby.";
+const SSE_RETRY_MS = 8000;
+const SSE_HEARTBEAT_MS = 15000;
+const SESSION_TAKEN_OVER_MESSAGE = "Session wurde von einem anderen Login übernommen.";
+const LOBBY_FULL_MESSAGE_CLEAN = "Lobby ist voll (max. 8 Spieler).";
 
 const db = {
   // In-Memory-"Datenbank" mit einfachen Arrays pro Tabelle
   lobbies: /** @type {Array<{id:string,name:string,createdAt:string,status:"open"|"active"|"closed"}>} */([]),
-  players: /** @type {Array<{id:string,name:string,lobbyId:string,joinedAt:string,isActive?:boolean,sessionId?:string|null,lastSeen?:string}>} */([]),
+  players: /** @type {Array<{id:string,name:string,lobbyId:string|null,joinedAt:string,isActive?:boolean,sessionId?:string|null,lastSeen?:string,lastLobbyId?:string|null}>} */([]),
   quotes: /** @type {Array<{id:string,text:string,createdAt:string}>} */([]),
   rounds: /** @type {Array<{id:string,lobbyId:string,number:number,state:"running"|"finished",winnerPlayerId?:string|null,createdAt:string,endedAt?:string|null}>} */([]),
   lives:  /** @type {Array<{id:string,roundId:string,playerId:string,livesRemaining:number,updatedAt:string}>} */([]),
   scores: /** @type {Array<{playerId:string,pointsTotal:number}>} */([]),
 };
+/** Liste aller aktiven SSE-Verbindungen (per Lobby/Topic filterbar). */
+const sseClients = [];
 
 // Hilfsfunktionen für konsistente Werte ---------------------------------------
 /**
@@ -116,6 +123,7 @@ function toPublicPlayer(player) {
     lobbyId: player.lobbyId,
     joinedAt: player.joinedAt,
     isActive: player.isActive !== false,
+    lastSeen: player.lastSeen ?? null,
   };
 }
 
@@ -127,6 +135,53 @@ function matchPlayerName(player, normalized) {
   return player.name.toLowerCase() === normalized;
 }
 
+/** Erzeugt eine eindeutige Session-ID für Spieler-Logins. */
+function generateServerSessionId() {
+  return nanoid(12);
+}
+
+/**
+ * Liefert den letzten bekannten Life-Snapshot eines Spielers in der neuesten Runde einer Lobby.
+ * Hilft Join/Resume dabei, den bestehenden Lebensstand gleich mitzuliefern.
+ */
+function latestLifeSnapshotForPlayer(lobbyId, playerId) {
+  const round = currentRound(lobbyId);
+  if (!round) return null;
+  const life = db.lives.find((entry) => entry.roundId === round.id && entry.playerId === playerId);
+  if (!life) return null;
+  return { ...life, roundNumber: round.number };
+}
+
+function registerSseClient(res, { lobbyId, topics } = {}) {
+  const id = nanoid(8);
+  const topicSet = topics && topics.size ? topics : undefined;
+  sseClients.push({ id, res, lobbyId: lobbyId || null, topics: topicSet });
+  return () => {
+    const idx = sseClients.findIndex((c) => c.id === id);
+    if (idx !== -1) sseClients.splice(idx, 1);
+  };
+}
+
+function broadcastSse(eventName, payload, { lobbyId, topic } = {}) {
+  const data = JSON.stringify(payload ?? {});
+  sseClients.forEach((client) => {
+    if (client.lobbyId && lobbyId && client.lobbyId !== lobbyId) return;
+    if (client.lobbyId && !lobbyId) return;
+    if (client.topics && topic && !client.topics.has(topic)) return;
+    client.res.write(`event: ${eventName}\n`);
+    client.res.write(`data: ${data}\n\n`);
+  });
+}
+
+setInterval(() => {
+  sseClients.forEach((client) => {
+    try {
+      client.res.write(`: keep-alive ${Date.now()}\n\n`);
+    } catch {
+      /* Aufräum-Logik passiert im close-Handler */
+    }
+  });
+}, SSE_HEARTBEAT_MS);
 /**
  * Löscht eine Lobby inkl. aller zugehörigen Spieler, Runden, Lives und Scores.
  * Erwartet entweder eine Lobby-ID oder einen Namen und liefert das entfernte Lobby-Objekt plus Zähler zurück.
@@ -144,12 +199,33 @@ function removeLobbyCascade({ lobbyId, lobbyName }) {
   const playerIds = new Set(players.map((p) => p.id));
   const rounds = db.rounds.filter((round) => round.lobbyId === id);
   const roundIds = new Set(rounds.map((round) => round.id));
+  const timestamp = now();
 
   db.lobbies = db.lobbies.filter((entry) => entry.id !== id);
-  db.players = db.players.filter((player) => player.lobbyId !== id);
+  db.players = db.players.map((player) => {
+    if (player.lobbyId !== id) return player;
+    return {
+      ...player,
+      lobbyId: null,
+      lastLobbyId: id,
+      isActive: false,
+      sessionId: null,
+      lastSeen: timestamp,
+    };
+  });
   db.scores = db.scores.filter((score) => !playerIds.has(score.playerId));
   db.rounds = db.rounds.filter((round) => round.lobbyId !== id);
   db.lives = db.lives.filter((life) => !roundIds.has(life.roundId));
+
+  broadcastSse("lobby_deleted", {
+    type: "LOBBY_DELETED",
+    lobbyId: lobby.id,
+    lobbyName: lobby.name,
+    removedPlayers: players.length,
+    removedRounds: rounds.length,
+    playerIds: players.map((p) => p.id),
+    timestamp,
+  }, { lobbyId: lobby.id, topic: "lobby" });
 
   return {
     lobby,
@@ -179,8 +255,8 @@ function buildDeleteResponse(result, res) {
  * Baut eine Erfolgspayload für Join- und Rejoin-Aufrufe.
  * mode = "join" oder "rejoin"; player-Objekt muss vollständig sein.
  */
-function buildJoinSuccess(player, mode) {
-  return {
+function buildJoinSuccess(player, mode, extras = {}) {
+  const payload = {
     ok: true,
     mode,
     playerId: player.id,
@@ -188,6 +264,12 @@ function buildJoinSuccess(player, mode) {
     player: toPublicPlayer(player),
     message: mode === "join" ? "Beitritt erfolgreich." : "Wieder verbunden.",
   };
+
+  if (extras.sessionId) payload.sessionId = extras.sessionId;
+  if (extras.sessionReplaced) payload.sessionReplaced = true;
+  if (extras.playerLives) payload.playerLives = extras.playerLives;
+
+  return payload;
 }
 
 /**
@@ -221,7 +303,7 @@ function processJoinOrRejoin({ lobby, rawName, clientSessionId }) {
   if (name.length > MAX_PLAYER_NAME) {
     return {
       status: 400,
-      payload: buildJoinError("UNKNOWN", `Spielername zu lang (max. ${MAX_PLAYER_NAME}).`),
+      payload: buildJoinError("UNKNOWN", "Spielername zu lang (max. " + MAX_PLAYER_NAME + ")."),
     };
   }
 
@@ -232,48 +314,32 @@ function processJoinOrRejoin({ lobby, rawName, clientSessionId }) {
   const timestamp = now();
 
   if (existing) {
-    const storedSessionId = typeof existing.sessionId === "string" && existing.sessionId ? existing.sessionId : null;
-    const isActive = existing.isActive !== false;
-
-    if (isActive) {
-      // Aktive Spieler dürfen nur erneut beitreten, wenn dieselbe Session-ID verwendet wird
-      // oder der Server explizit idempotente Joins erlauben soll.
-      if (
-        (sanitizedSessionId && storedSessionId && sanitizedSessionId === storedSessionId) ||
-        (!storedSessionId && sanitizedSessionId)
-      ) {
-        existing.sessionId = sanitizedSessionId ?? existing.sessionId ?? null;
-        existing.lastSeen = timestamp;
-        existing.isActive = true;
-        return { status: 200, payload: buildJoinSuccess(existing, "rejoin") };
-      }
-      if (!sanitizedSessionId && !storedSessionId && IDEMPOTENT_JOIN) {
-        existing.lastSeen = timestamp;
-        return { status: 200, payload: buildJoinSuccess(existing, "rejoin") };
-      }
-      return { status: 409, payload: buildJoinError("NAME_ACTIVE", NAME_ACTIVE_MESSAGE) };
-    }
-
-    if (storedSessionId && sanitizedSessionId && storedSessionId !== sanitizedSessionId) {
-      // Session-IDs kollidieren: der Client hat einen alten Namen ohne passende Session erneut angefordert
-      return { status: 409, payload: buildJoinError("NAME_TAKEN", NAME_TAKEN_MESSAGE) };
-    }
-    if (storedSessionId && !sanitizedSessionId) {
-      return { status: 409, payload: buildJoinError("NAME_TAKEN", NAME_TAKEN_MESSAGE) };
-    }
+    const previousSessionId =
+      typeof existing.sessionId === "string" && existing.sessionId ? existing.sessionId : null;
+    const nextSessionId = sanitizedSessionId || generateServerSessionId();
+    const sessionReplaced = Boolean(previousSessionId && previousSessionId !== nextSessionId);
 
     existing.isActive = true;
-    existing.sessionId = sanitizedSessionId ?? existing.sessionId ?? null;
+    existing.sessionId = nextSessionId;
     existing.lastSeen = timestamp;
-    return { status: 200, payload: buildJoinSuccess(existing, "rejoin") };
+    existing.lobbyId = lobby.id;
+
+    const playerLives = latestLifeSnapshotForPlayer(lobby.id, existing.id);
+    return {
+      status: 200,
+      payload: buildJoinSuccess(existing, "rejoin", {
+        sessionId: nextSessionId,
+        sessionReplaced,
+        playerLives,
+      }),
+    };
   }
 
-  // Nur aktive Spieler zählen für das Cap, damit inaktive oder getrennte Spieler Slots freigeben können
   const activeCount = players.filter((player) => player.isActive !== false).length;
   if (activeCount >= MAX_PLAYERS_PER_LOBBY) {
     return {
       status: 409,
-      payload: buildJoinError("MAX_PLAYERS", LOBBY_FULL_MESSAGE),
+      payload: buildJoinError("MAX_PLAYERS", LOBBY_FULL_MESSAGE_CLEAN),
     };
   }
 
@@ -283,15 +349,60 @@ function processJoinOrRejoin({ lobby, rawName, clientSessionId }) {
     lobbyId: lobby.id,
     joinedAt: timestamp,
     isActive: true,
-    sessionId: sanitizedSessionId ?? null,
+    sessionId: sanitizedSessionId || generateServerSessionId(),
     lastSeen: timestamp,
   };
   db.players.push(player);
   scoreFor(player.id);
-  return { status: 201, payload: buildJoinSuccess(player, "join") };
+  const playerLives = latestLifeSnapshotForPlayer(lobby.id, player.id);
+  return {
+    status: 201,
+    payload: buildJoinSuccess(player, "join", {
+      sessionId: player.sessionId,
+      playerLives,
+    }),
+  };
 }
 
-// ===== Lobby & Players =====
+/**
+ * SSE-Endpoint für Events wie LOBBY_DELETED.
+ * Optionaler Query-Filter: ?lobbyId=XYZ begrenzt Events auf eine Lobby.
+ */
+app.get("/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  if (typeof res.flushHeaders === "function") res.flushHeaders();
+
+  const lobbyId =
+    typeof req.query?.lobbyId === "string" && req.query.lobbyId.trim()
+      ? req.query.lobbyId.trim()
+      : null;
+  const topicsRaw = String(req.query?.topic || req.query?.topics || "").trim();
+  const topics =
+    topicsRaw.length > 0
+      ? new Set(
+          topicsRaw
+            .split(",")
+            .map((t) => t.trim().toLowerCase())
+            .filter(Boolean)
+        )
+      : undefined;
+
+  res.write(`retry: ${SSE_RETRY_MS}\n\n`);
+  res.write(
+    `event: connected\n` +
+      `data: ${JSON.stringify({
+        ok: true,
+        lobbyId,
+        topics: topics ? Array.from(topics) : undefined,
+      })}\n\n`
+  );
+
+  const cleanup = registerSseClient(res, { lobbyId, topics });
+  req.on("close", cleanup);
+});
+// ===== Lobbys & Spieler =====
 /**
  * GET /lobbies
  * Liefert alle bekannten Lobbys (inkl. Status) sortiert nach Erstellzeit.
@@ -363,11 +474,16 @@ app.post("/lobbies/:lobbyId/join",(req,res)=>{
     clientSessionId: req.body?.clientSessionId,
   });
   if (result.payload.ok) {
-    return res.status(result.status).json(result.payload.player);
+    return res.status(result.status).json({
+      ...result.payload.player,
+      sessionId: result.payload.sessionId,
+      playerLives: result.payload.playerLives,
+    });
   }
   const message = result.payload.message || "Beitreten nicht möglich.";
   return res.status(result.status).json({ error: message, errorCode: result.payload.errorCode ?? "UNKNOWN" });
 });
+
 
 /**
  * POST /lobbies/:lobbyId/join-or-rejoin
@@ -467,7 +583,7 @@ app.post("/leaderboards/delete",(req,res)=>{
   return buildDeleteResponse(result, res);
 });
 
-// ===== Quotes =====
+// ===== Sprüche =====
 /**
  * GET /quotes
  * Liefert alle Sprüche (neuste zuerst). Frontend nutzt dies z. B. zur Anzeige zwischen Runden.
@@ -483,7 +599,7 @@ app.post("/quotes",(req,res)=>{ const text=normLine(req.body?.text); if(text.len
   const q={id:nanoid(10),text,createdAt:now()}; db.quotes.push(q); res.status(201).json(q);
 });
 
-// ===== Rounds =====
+// ===== Runden =====
 /**
  * GET /rounds/current?lobbyId=XYZ
  * Liefert die letzte Runde der angegebenen Lobby plus Lives-/Score-Snapshots.
@@ -527,10 +643,18 @@ app.patch("/rounds/:roundId/life",(req,res)=>{
   const roundId=req.params.roundId; const r=db.rounds.find(x=>x.id===roundId);
   if(!r) return res.status(404).json({error:"Runde nicht gefunden"}); if(r.state!=="running") return res.status(409).json({error:"Runde bereits beendet"});
   const playerId=String(req.body?.playerId||""); const livesRemaining=Number(req.body?.livesRemaining);
+  const clientSessionId = sanitizeSessionId(req.body?.clientSessionId);
+  const player = db.players.find(p=>p.id===playerId);
+  if(!player) return res.status(404).json({error:"Spieler nicht gefunden"});
+  const storedSessionId = sanitizeSessionId(player.sessionId);
+  if(storedSessionId && clientSessionId && storedSessionId!==clientSessionId) return res.status(409).json({error:SESSION_TAKEN_OVER_MESSAGE,errorCode:"SESSION_STALE"});
+  if(storedSessionId && !clientSessionId) return res.status(409).json({error:SESSION_TAKEN_OVER_MESSAGE,errorCode:"SESSION_STALE"});
+  player.lastSeen = now();
   if(!Number.isInteger(livesRemaining) || livesRemaining<0 || livesRemaining>4) return res.status(400).json({error:"Ungültiger Leben-Wert"});
   const ls = db.lives.find(x=>x.roundId===roundId && x.playerId===playerId); if(!ls) return res.status(404).json({error:"LifeState nicht gefunden"});
   ls.livesRemaining = livesRemaining; ls.updatedAt = now(); res.json(ls);
 });
+
 
 /**
  * POST /rounds/:roundId/finish
@@ -542,12 +666,26 @@ app.post("/rounds/:roundId/finish",(req,res)=>{
   if(!r) return res.status(404).json({error:"Runde nicht gefunden"});
   if(r.state==="finished") return res.status(409).json({error:"Runde bereits beendet"});
   const winnerPlayerId = String(req.body?.winnerPlayerId||"");
-  if(!db.players.find(p=>p.id===winnerPlayerId)) return res.status(404).json({error:"Gewinner-Spieler nicht gefunden"});
+  const clientSessionId = sanitizeSessionId(req.body?.clientSessionId);
+  const winner = db.players.find(p=>p.id===winnerPlayerId);
+  if(!winner) return res.status(404).json({error:"Gewinner-Spieler nicht gefunden"});
+  const storedSessionId = sanitizeSessionId(winner.sessionId);
+  if(storedSessionId && clientSessionId && storedSessionId!==clientSessionId) return res.status(409).json({error:SESSION_TAKEN_OVER_MESSAGE,errorCode:"SESSION_STALE"});
+  if(storedSessionId && !clientSessionId) return res.status(409).json({error:SESSION_TAKEN_OVER_MESSAGE,errorCode:"SESSION_STALE"});
+  winner.lastSeen = now();
   r.state="finished"; r.winnerPlayerId=winnerPlayerId; r.endedAt=now();
   scoreFor(winnerPlayerId).pointsTotal += 1;
   const scores = listPlayers(r.lobbyId).map(p=>scoreFor(p.id));
+  broadcastSse("round_finished", {
+    type: "ROUND_FINISHED",
+    lobbyId: r.lobbyId,
+    roundId: r.id,
+    round: r,
+    scores,
+  }, { lobbyId: r.lobbyId, topic: "round" });
   res.json({ round: r, scores });
 });
+
 
 // ===== Leaderboard (aggregiert alle Lobbys + Spielerstände) =====
 /**
@@ -600,5 +738,21 @@ app.get("/leaderboard",(req,res)=>{
 // Healthcheck-Endpoint für schnelle Verfügbarkeitsprüfung
 app.get("/health",(_req,res)=>res.json({ok:true,time:now()}));
 
-// Server starten und Port + Einstellung in Konsole ausgeben
-app.listen(PORT,()=>console.log(`Mock backend listening on http://localhost:${PORT} (IDEMPOTENT_JOIN=${IDEMPOTENT_JOIN})`));
+function startServer(port, attempt = 1) {
+  const server = app.listen(port, () =>
+    console.log(`Mock backend listening on http://localhost:${port} (IDEMPOTENT_JOIN=${IDEMPOTENT_JOIN})`)
+  );
+
+  server.on("error", (err) => {
+    if (err && err.code === "EADDRINUSE" && attempt < MAX_PORT_RETRY) {
+      const next = port + 1;
+      console.warn(`Port ${port} belegt, versuche ${next}...`);
+      return startServer(next, attempt + 1);
+    }
+    console.error("Server konnte nicht starten:", err);
+    process.exit(1);
+  });
+}
+
+startServer(PORT);
+

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Haupt-Router der Schwimm-Frontend-App.
  * Koppelt das Vite-Frontend mit allen Page-Komponenten und kapselt Legacy-Weiterleitungen,
  * damit alte Deep-Links (z. B. /game, /lose) weiterhin in die modernen Lobby-/Round-Routen führen.
@@ -10,7 +10,7 @@ import GamePage from "./pages/GamePage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import LosePage from "./pages/LosePage";
 import WinPage from "./pages/WinPage";
-import { loadSession } from "./utils/session";
+import { loadSession, seedInitialLoginRequirement, isInitialLoginRequired } from "./utils/session";
 import { losePath, roundPath, winPath, withSearch } from "./utils/paths";
 import LoginPage from "./pages/LoginPage";
 import { usePlayerSession } from "./context/PlayerSessionContext";
@@ -25,6 +25,7 @@ export default function App() {
   return (
     <TransitionOverlayProvider>
       <BrowserRouter>
+        <InitialLoginRedirect />
         <Routes>
           {/* "/" rendert die HomePage (Lobby-Übersicht), "/login" ist ausschließlich der Erstbesuch-/Logout-Einstieg. */}
           <Route path="/" element={<HomePageGate />} />
@@ -63,7 +64,7 @@ function HomePageGate() {
   const isRejoinMode = params.get("mode") === "rejoin";
   const sessionSeed = useMemo(() => loadSession(), []);
   const hasStoredLobbySession = Boolean(
-    activeSession?.playerName?.trim() || sessionSeed?.playerName?.trim()
+    sessionSeed?.playerName?.trim() || (isLoggedIn && activeSession?.playerName?.trim())
   );
 
   useEffect(() => {
@@ -77,6 +78,27 @@ function HomePageGate() {
   }
 
   return <HomePage />;
+}
+
+/**
+ * Erzwingt beim ersten Tab-Aufruf die Login-Seite und verhindert, dass alte Sessions automatisch übernommen werden.
+ * Setzt ein sessionStorage-Flag, sobald der Gate passiert wurde.
+ */
+function InitialLoginRedirect() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const requiresLogin = seedInitialLoginRequirement() || isInitialLoginRequired();
+    if (!requiresLogin) return;
+    if (location.pathname === "/login") return;
+    navigate("/login", {
+      replace: true,
+      state: { from: location.pathname + location.search },
+    });
+  }, [location.pathname, location.search, navigate]);
+
+  return null;
 }
 
 /**
@@ -110,7 +132,7 @@ function LegacyGameRedirect() {
     navigate(roundPath({ lobbyName, lobbyId, roundNumber }), { replace: true });
   }, [navigate, sp]);
 
-  return <RedirectNote label="Leite zum Spiel weiter …" />;
+  return <RedirectNote label="Leite zum Spiel weiter" />;
 }
 
 /**
@@ -138,7 +160,7 @@ function LegacyLoseRedirect() {
     );
   }, [navigate, sp]);
 
-  return <RedirectNote label="Leite zur Warteseite weiter …" />;
+  return <RedirectNote label="Leite zur Warteseite weiter" />;
 }
 
 /**
@@ -156,7 +178,7 @@ function LegacyWinRedirect() {
     navigate(winPath({ lobbyName, lobbyId }), { replace: true });
   }, [navigate, sp]);
 
-  return <RedirectNote label="Leite zum Gewinner-Screen weiter …" />;
+  return <RedirectNote label="Leite zum Gewinner-Screen weiter" />;
 }
 
 /**

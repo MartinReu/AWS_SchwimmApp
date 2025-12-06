@@ -28,21 +28,38 @@ export async function startNextRound(
 }
 
 /** PATCH-Endpoint zum Aktualisieren der Leben eines Spielers. */
-export async function updateLife(roundId: string, playerId: string, livesRemaining: number): Promise<LifeState> {
+export async function updateLife(
+  roundId: string,
+  playerId: string,
+  livesRemaining: number,
+  clientSessionId?: string | null
+): Promise<LifeState> {
   const res = await fetch(`${API_BASE}/rounds/${encodeURIComponent(roundId)}/life`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ playerId, livesRemaining }),
+    body: JSON.stringify({
+      playerId,
+      livesRemaining,
+      ...(clientSessionId ? { clientSessionId } : {}),
+    }),
   });
   return parseJson(res);
 }
 
 /** Markiert eine Runde als beendet und vergibt Punkte. */
-export async function finishRound(roundId: string, winnerPlayerId: string,): Promise<{ round: Round; scores: Score[] }> {
+export async function finishRound(
+  roundId: string,
+  winnerPlayerId: string,
+  clientSessionId?: string | null,
+): Promise<{ round: Round; scores: Score[] }> {
   const res = await fetch(`${API_BASE}/rounds/${encodeURIComponent(roundId)}/finish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ winnerPlayerId, finishedByPlayerId: winnerPlayerId }),
+    body: JSON.stringify({
+      winnerPlayerId,
+      finishedByPlayerId: winnerPlayerId,
+      ...(clientSessionId ? { clientSessionId } : {}),
+    }),
   });
   return parseJson(res);
 }

@@ -16,9 +16,27 @@
 }
 
 /* === Farbtokens ===
-   Exakte HEX-Werte aus Figma nutzen?.
+   Exakte HEX-Werte aus Figma nutzen, damit UI und Figma identisch bleiben.
 */
 html, body, #root { height: 100%; }
+
+:root {
+  --bubble-rise-start: 26dvh;
+  --bubble-rise-end: -220dvh;
+  --bubble-start-bottom: 0dvh;
+  --bubble-rise-start-scale: 0.96;
+  --bubble-rise-end-scale: 1.1;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --bubble-rise-start: 22dvh;
+    --bubble-rise-end: -200dvh;
+    --bubble-start-bottom: 0dvh;
+    --bubble-rise-start-scale: 0.94;
+    --bubble-rise-end-scale: 1.08;
+  }
+}
 
 body {
   background: var(--tt-bg);
@@ -140,15 +158,15 @@ input { caret-color: var(--tt-blue); }
   }
 }
 
-/* === Bubble Transition (utility fallback, because Tailwind v4 ignores custom animations in config) === */
+/* === Bubble Transition (Fallback, weil Tailwind v4 Custom-Animationen in der Config ignoriert) === */
 @layer utilities {
   @keyframes bubble-rise {
     0% {
-      transform: translate(-50%, 20vh) scale(0.9);
+      transform: translate3d(-50%, var(--bubble-rise-start, 26dvh), 0) scale(var(--bubble-rise-start-scale, 0.96));
       opacity: 1;
     }
     100% {
-      transform: translate(-50%, -120vh) scale(1.06);
+      transform: translate3d(-50%, var(--bubble-rise-end, -220dvh), 0) scale(var(--bubble-rise-end-scale, 1.1));
       opacity: 1;
     }
   }
@@ -175,7 +193,27 @@ input { caret-color: var(--tt-blue); }
     }
   }
 
-  /* Base classes (for completeness) */
+  @keyframes tt-bubble-wobble {
+    0% {
+      transform: translate(-50%, -50%) rotate(var(--schw-rot, 0deg)) scale(var(--schw-scale-min, 0.94));
+    }
+    48% {
+      transform: translate(-50%, -52%) rotate(var(--schw-rot, 0deg)) scale(var(--schw-scale-max, 1.16));
+    }
+    100% {
+      transform: translate(-50%, -50%) rotate(var(--schw-rot, 0deg)) scale(var(--schw-scale-min, 0.94));
+    }
+  }
+
+  .tt-bubble-wobble {
+    animation: tt-bubble-wobble var(--schw-wobble-duration, 1800ms) steps(3, end) infinite;
+    animation-direction: alternate;
+    animation-delay: var(--schw-wobble-delay, 0s);
+    transform-origin: center;
+    will-change: transform;
+  }
+
+  /* Basisklassen, falls Tailwind die Animation nicht generiert */
   .animate-bubble-rise {
     animation: bubble-rise var(--bubble-rise-duration, 1200ms) linear forwards;
     will-change: transform, opacity;
@@ -188,16 +226,44 @@ input { caret-color: var(--tt-blue); }
     animation: bubble-fade 900ms ease-in-out forwards;
   }
 
-  /* Respect prefers-reduced-motion like Tailwind's motion-safe/-reduce helpers */
-  @media (prefers-reduced-motion: no-preference) {
-    .motion-safe\:animate-bubble-rise {
-      animation: bubble-rise var(--bubble-rise-duration, 1200ms) linear forwards;
-      will-change: transform, opacity;
-    }
+  .bubble-transition__bubble {
+    bottom: var(--bubble-start-bottom, 0dvh);
+    transform: translate3d(-50%, var(--bubble-rise-start, 26dvh), 0) scale(var(--bubble-rise-start-scale, 0.96));
+    opacity: 0.9;
   }
+
+  /* Achtung auf prefers-reduced-motion – entspricht Tailwinds motion-safe/-reduce */
+  .motion-safe\:animate-bubble-rise {
+    animation: bubble-rise var(--bubble-rise-duration, 1200ms) linear forwards;
+    will-change: transform, opacity;
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    .bubble-transition__bubble {
+      --bubble-start-bottom: 12dvh;
+      --bubble-rise-start: 0dvh;
+      --bubble-rise-end: -48dvh;
+      transform: translate(-50%, 0) scale(1);
+      opacity: 0.8;
+      animation-name: bubble-fade;
+      animation-duration: min(var(--bubble-overlay-duration, 1500ms), 1100ms);
+      animation-timing-function: ease-in-out;
+      animation-fill-mode: both;
+    }
+
+    .tt-bubble-wobble {
+      animation: none !important;
+    }
+
+    .motion-safe\:animate-bubble-rise {
+      animation: none;
+    }
+
     .motion-reduce\:animate-bubble-fade {
-      animation: bubble-fade 900ms ease-in-out forwards;
+      animation-name: bubble-fade;
+      animation-duration: min(var(--bubble-overlay-duration, 1500ms), 1100ms);
+      animation-timing-function: ease-in-out;
+      animation-fill-mode: both;
     }
   }
 }

@@ -21,7 +21,9 @@
   );
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-right: 0.25rem;
+  padding: 0.35rem 0.25rem 0.5rem 0;
+  scroll-padding-top: 0.5rem;
+  scroll-padding-bottom: 0.75rem;
   scrollbar-gutter: stable;
 }
 
@@ -49,4 +51,21 @@
   height: var(--playerlist-item-height);
   box-sizing: border-box;
   flex: 0 0 var(--playerlist-item-height);
+  overflow: visible;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --playerlist-item-height: 3.6rem;
+    --playerlist-gap: 0.4rem;
+  }
+
+  .playerlist-grid {
+    --playerlist-gap: 0.4rem;
+  }
+
+  .playerlist-grid.playerlist-scrollable {
+    padding-inline: 0.1rem 0.25rem;
+    scroll-padding-top: 0.35rem;
+  }
 }

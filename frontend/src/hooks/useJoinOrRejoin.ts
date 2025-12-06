@@ -10,6 +10,7 @@ import {
   type JoinOrRejoinParams,
   type JoinOrRejoinResponse,
   type JoinOrRejoinErrorCode,
+  type PlayerLifeSnapshot,
 } from "../api/lobbies";
 
 export type JoinCallParams = JoinOrRejoinParams & {
@@ -20,6 +21,9 @@ export type JoinSuccess = {
   player: Player;
   response: JoinOrRejoinResponse;
   mode: "join" | "rejoin";
+  sessionId?: string | null;
+  sessionReplaced?: boolean;
+  playerLives?: PlayerLifeSnapshot | null;
 };
 
 export type JoinMutationError = Error & {
@@ -54,6 +58,9 @@ export function useJoinOrRejoin() {
         player: response.player,
         response,
         mode,
+        sessionId: response.sessionId ?? null,
+        sessionReplaced: response.sessionReplaced === true,
+        playerLives: response.playerLives ?? null,
       };
     } catch (error) {
       const mapped = toJoinMutationError(error);

@@ -15,6 +15,7 @@ import LobbyDropdown from "../components/lobby/LobbyDropdown";
 import { api } from "../api";
 import { usePlayerSession } from "../context/PlayerSessionContext";
 import { useTransitionOverlay } from "../context/TransitionOverlayContext";
+import { isInitialLoginRequired, markInitialLoginComplete } from "../utils/session";
 
 const MAX_PLAYER_NAME = 18;
 const UNSAFE_NAME_PATTERN = /[<>]/;
@@ -32,7 +33,7 @@ const SESSION_TEXT = [
   "Deutschlandflagge, zwei Stück im Jesicht",
   "Erste Strophe sing' ick mit, dit war keene Absicht",
 ].join("\n");
-const PYRO_PIXELS = ["A   A   A   A", "|\\  |\\  |\\  |\\", "| > | > | > | >", "|/  |/  |/  |/", "V   V   V   V", "PYRO * KEEN * VERBRECHEN"].join("\n");
+const PYRO_PIXELS = ["A   A   A   A", "|\\  |\\  |\\  |\\", "| > | > | > | >", "|/  |/  |/  |/", "V   V   V   V", "PYRO * IS KEEN * VERBRECHEN"].join("\n");
 const FLAG_PIXELS = [
   "##############################",
   "##############################",
@@ -41,13 +42,12 @@ const FLAG_PIXELS = [
   "==============================",
   "==============================",
 ].join("\n");
-const SNACK_PIXELS = ["[CHIPS][FUNNY][FRISCH]", "|TISCH||TANKE||BIER|", "==##==##==##==##==", "SNACK MODE AKTIV"].join("\n");
+const SNACK_PIXELS = ["[CHIPS][FUNNY][FRISCH]", "|TISCH||FLIESSEN||TISCH|", "==##==##==##==##==", "SNACK MODE AKTIV"].join("\n");
 const MATCH_PIXELS = [
   "90:00   |   RUND > ECKE",
   "OELF MANN  AUF  DEM  PLATZ",
-  "[[]][[]][[]][[]][[]][[]]",
-  "RASEN . SCHACH . PYRO",
-  "ROUND PUSH EDGE",
+  "[ >>>> KEVIN KURANY <<<<]",
+  "SCHACH . RASEN . SCHACH",
 ].join("\n");
 
 /** Holt Login-Daten, zeigt Autocomplete und setzt nach Bestätigung den globalen Spielernamen. */
@@ -70,6 +70,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
+    if (isInitialLoginRequired()) return;
     // Überspringt die Login-Seite komplett, sobald eine gültige Session existiert (Erstbesuch bereits erledigt).
     navigate(redirectTarget, { replace: true });
   }, [isLoggedIn, navigate, redirectTarget]);
@@ -104,7 +105,7 @@ export default function LoginPage() {
       return;
     }
     if (UNSAFE_NAME_PATTERN.test(trimmed)) {
-      setErrPlayer("Keine < oder > – Teletext hat Angst vor Skript-Kiddies.");
+      setErrPlayer("Keine < oder > - Teletext hat Angst vor Skript-Kiddies.");
     } else if (trimmed.length < 2) {
       setErrPlayer("Mindestens 2 Zeichen, sonst verknotet das Modem.");
     } else if (trimmed.length > MAX_PLAYER_NAME) {
@@ -142,6 +143,7 @@ export default function LoginPage() {
       const upper = trimmed.toUpperCase();
       setPlayerName(upper);
       confirmPlayerName(upper);
+      markInitialLoginComplete();
       triggerBubbleTransition();
       navigate(redirectTarget, { replace: true });
     } finally {
@@ -158,12 +160,15 @@ export default function LoginPage() {
         header={<TeletextHeader mode="LOGIN" />}
         footer={<span className="tt-text text-xs">Login zuerst, dann ab ins Becken.</span>}
       >
-        <div className={clsx("space-y-8 pb-10 tt-login-scroll", showOverlay && "tt-login-scroll--intro")}>
-          <TTToolbar title="Wer bist du?" description="Login kurz angeben, dann wartet die Lobby." />
+        <div className={clsx("tt-stack pb-10 tt-login-scroll", showOverlay && "tt-login-scroll--intro")}>
+          <TTToolbar
+            title="Wer bist du?"
+            description={<span className="text-white">samma mäuschen, du bist ja rischtisch groß jeworden.</span>}
+          />
 
-          <div className="grid gap-8 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-            <div className="space-y-8">
-              <TTPanel title="Spielername" eyebrow=">> Login" variant="magenta">
+          <div className="tt-panel-stack xl:grid xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] xl:items-start">
+            <div className="tt-panel-stack">
+              <TTPanel title="Gib Name Nutte" eyebrow=">> Login 000" variant="magenta">
                 <form onSubmit={onSubmit} className="space-y-4" autoComplete="off">
                   <LobbyDropdown
                     value={playerName}
@@ -185,7 +190,7 @@ export default function LoginPage() {
                     )}
                     {!!names.length && !loadingNames && (
                       <p className="uppercase tracking-[0.2em]">
-                        {String(names.length).padStart(2, "0")} alte Hasen im Dropdown – such dir einen aus oder tipp was Neues.
+                        {String(names.length).padStart(2, "0")} alte Hasen im Dropdown – such dir einen aus oder tipp was Neues. Einzigartig wie du, Bitch!
                       </p>
                     )}
                     {namesError && (
@@ -200,51 +205,69 @@ export default function LoginPage() {
                     )}
                   </div>
 
-                  <TTButton type="submit" variant="danger" className="w-full justify-center" disabled={!canSubmit} busy={submitting}>
+                  <TTButton
+                    type="submit"
+                    variant="secondary"
+                    className={clsx(
+                      "tt-login-continue w-full justify-center",
+                      !canSubmit && "line-through decoration-2 decoration-[var(--tt-danger)]"
+                    )}
+                    disabled={!canSubmit}
+                    busy={submitting}
+                  >
                     Weiter
                   </TTButton>
                 </form>
               </TTPanel>
 
-              <TTPanel title="Was gespeichert wird" eyebrow=">> Session" variant="cyan">
+              <TTPanel title="Geistreich" eyebrow=">> Session 1312" variant="cyan">
                 <div className="space-y-4">
-                  <div className="tt-text text-xs font-mono uppercase tracking-[0.3em] text-[var(--tt-green)]">#[SESSION-FEED]</div>
-                  <pre className="tt-text whitespace-pre-wrap text-sm leading-relaxed text-white">{SESSION_TEXT}</pre>
+                  <div className="tt-text text-xs font-mono uppercase tracking-[0.3em] text-[var(--tt-green)]">#[MACH-LACK]</div>
+                  <p className="tt-text whitespace-normal text-sm leading-relaxed text-white tt-justify">{SESSION_TEXT}</p>
                 </div>
               </TTPanel>
             </div>
 
-            <div className="space-y-4">
+            <div className="tt-panel-stack">
               <TTPanel title="Pyro Raster" eyebrow=">> Rubrik 191" variant="danger" className="lg:min-h-[220px]">
                 <div className="space-y-3">
                   <pre className="tt-text whitespace-pre font-mono text-xs uppercase leading-4 text-[var(--tt-yellow)]">{PYRO_PIXELS}</pre>
-                  <p className="tt-text text-sm text-white">
-                    Wir fackeln allet ab – der Pyrotechnik-Ticker meldet Dauerfeuer direkt aus dem Stammtischkeller.
+                  <p className="tt-text text-sm text-white tt-justify">
+                    Wir fackeln allet ab – der Pyrotechnik-Trick meldet Dauerfeuer direkt aus dem Stammtischkeller.
                   </p>
                 </div>
               </TTPanel>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TTPanel title="Schland Pixel" eyebrow=">> 101" variant="magenta" className="h-full">
+              <div className="tt-panel-stack sm:grid sm:grid-cols-2 sm:items-start">
+                <TTPanel
+                  title="Schland Pixel"
+                  eyebrow=">> Rubrik 101"
+                  variant="magenta"
+                  className="h-full"
+                  style={{ borderColor: "#8a2be2" }}
+                >
                   <div className="space-y-2">
                     <pre className="tt-text whitespace-pre font-mono text-xs uppercase leading-4 text-[var(--tt-yellow)]">{FLAG_PIXELS}</pre>
-                    <p className="tt-text text-xs text-white"># = Schwarz, - = Rot, = = Gold – doppelte Fahne im Blick.</p>
+                    <p className="tt-text text-sm text-white tt-justify">
+                      #Schwarz, -Rot, =Jold <br />
+                      Glas is voll.
+                    </p>
                   </div>
                 </TTPanel>
 
-                <TTPanel title="Snack-O-Mat" eyebrow=">> 333" variant="cyan" className="h-full">
+                <TTPanel title="Snack-O-Mat" eyebrow=">> Rubrik 333" variant="cyan" className="h-full">
                   <div className="space-y-2">
                     <pre className="tt-text whitespace-pre font-mono text-xs uppercase leading-4 text-[var(--tt-green)]">{SNACK_PIXELS}</pre>
-                    <p className="tt-text text-xs text-white">Chips, Fliesentisch und Tankenbier bilden die Pflichtverpflegung.</p>
+                    <p className="tt-text text-sm text-white tt-justify">Chips, Fliesentisch und Tankenbier bilden die Pflichtverpflegung. Hätt ich gewusst das du vorbeikommst, hätt ich nicht gewichst...</p>
                   </div>
                 </TTPanel>
               </div>
 
-              <TTPanel title="Rasenschach" eyebrow=">> 451" variant="default">
+              <TTPanel title="Rasenschach" eyebrow=">> Rubrik 451" variant="default">
                 <div className="space-y-2">
                   <pre className="tt-text whitespace-pre font-mono text-xs uppercase leading-4 text-[var(--tt-secondary)]">{MATCH_PIXELS}</pre>
-                  <p className="tt-text text-sm text-[var(--tt-text-muted)]">
-                    Oelf Mann auf dem Platz, Runde ins Eckige – hier laufen die Teletext-Linien fürs nächste Match.
+                  <p className="tt-text text-sm text-white tt-justify">
+                    Ölf Mann auf dem Platz, Runde ins Eckige – hier laufen die Teletext-Linien fürs nächste Match.
                   </p>
                 </div>
               </TTPanel>
@@ -264,3 +287,7 @@ function resolveRedirectTarget(state: unknown) {
   }
   return "/";
 }
+
+
+
+

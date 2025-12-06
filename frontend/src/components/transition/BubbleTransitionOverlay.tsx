@@ -19,16 +19,39 @@ const BUBBLE_COUNT = 140;
 const MIN_SIZE = 42;
 const MAX_SIZE = 190;
 const MIN_DELAY = 0;
-const MAX_DELAY = 400;
-const MIN_DURATION = 700;
-const MAX_DURATION = 1100;
+const MAX_DELAY = 160;
+const MIN_DURATION = 1500;
+const MAX_DURATION = 2600;
+const DESKTOP_BUBBLE_VARS = {
+  startBottom: 0,
+  riseStart: 26,
+  riseEnd: -220,
+  riseStartScale: 0.96,
+  riseEndScale: 1.1,
+};
+const MOBILE_BUBBLE_VARS = {
+  startBottom: 0,
+  riseStart: 22,
+  riseEnd: -200,
+  riseStartScale: 0.94,
+  riseEndScale: 1.08,
+};
 
-export const BUBBLE_OVERLAY_DURATION_MS = 1500;
+export const BUBBLE_OVERLAY_DURATION_MS = 2800;
 
 interface BubbleTransitionOverlayProps {
   visible: boolean;
   variantKey?: number;
 }
+
+type BubbleConfigOptions = {
+  minSize?: number;
+  maxSize?: number;
+  minDelay?: number;
+  maxDelay?: number;
+  minDuration?: number;
+  maxDuration?: number;
+};
 
 /**
  * Vollbild-Blasenanimation, die bei sichtbarem Zustand eine neue Zufallskonfiguration erzeugt.
@@ -37,28 +60,50 @@ interface BubbleTransitionOverlayProps {
  * - variantKey: erzwingt neuen Zufalls-Seed beim Triggern, damit die Animation variiert
  */
 export default function BubbleTransitionOverlay({ visible, variantKey = 0 }: BubbleTransitionOverlayProps) {
-  const bubbles = useMemo(() => createBubbleConfig(BUBBLE_COUNT), [variantKey]);
+  const isMobile = typeof window !== "undefined" ? window.matchMedia("(max-width: 640px)").matches : false;
+
+  const bubbleOptions = useMemo<BubbleConfigOptions>(
+    () => ({
+      minSize: isMobile ? 30 : MIN_SIZE,
+      maxSize: isMobile ? 140 : MAX_SIZE,
+      minDelay: MIN_DELAY,
+      maxDelay: isMobile ? MAX_DELAY + 60 : MAX_DELAY,
+      minDuration: isMobile ? MIN_DURATION + 120 : MIN_DURATION,
+      maxDuration: isMobile ? MAX_DURATION + 180 : MAX_DURATION,
+    }),
+    [isMobile]
+  );
+
+  const bubbleCount = isMobile ? Math.round(BUBBLE_COUNT * 0.8) : BUBBLE_COUNT;
+  const bubbles = useMemo(() => createBubbleConfig(bubbleCount, bubbleOptions), [bubbleCount, bubbleOptions, variantKey]);
 
   if (!visible) return null;
 
-  const overlayStyle: CSSProperties = { ["--bubble-overlay-duration" as string]: `${BUBBLE_OVERLAY_DURATION_MS}ms` };
+  const bubbleVars = isMobile ? MOBILE_BUBBLE_VARS : DESKTOP_BUBBLE_VARS;
+  const overlayStyle: CSSProperties = {
+    ["--bubble-overlay-duration" as string]: `${BUBBLE_OVERLAY_DURATION_MS}ms`,
+    ["--bubble-start-bottom" as string]: `${bubbleVars.startBottom}dvh`,
+    ["--bubble-rise-start" as string]: `${bubbleVars.riseStart}dvh`,
+    ["--bubble-rise-end" as string]: `${bubbleVars.riseEnd}dvh`,
+    ["--bubble-rise-start-scale" as string]: `${bubbleVars.riseStartScale}`,
+    ["--bubble-rise-end-scale" as string]: `${bubbleVars.riseEndScale}`,
+  };
 
   const overlay = (
     <div
-      className="fixed inset-0 z-[9999] pointer-events-none animate-bubble-overlay"
+      className="fixed inset-0 z-[9999] pointer-events-none animate-bubble-overlay overflow-hidden bg-transparent"
       style={overlayStyle}
       aria-hidden="true"
       role="presentation"
     >
-      <div className="relative h-full w-full max-w-5xl mx-auto overflow-hidden">
+      <div className="relative h-full min-h-screen min-h-[100dvh] w-full max-w-6xl mx-auto overflow-visible sm:overflow-hidden">
         {bubbles.map((bubble) => (
           <span
             key={bubble.id}
-            className="absolute block motion-safe:animate-bubble-rise motion-reduce:bottom-[15%] motion-reduce:animate-bubble-fade"
+            className="bubble-transition__bubble absolute block animate-bubble-rise motion-reduce:animate-bubble-fade motion-reduce:opacity-80"
             style={
               {
                 left: `${bubble.left}%`,
-                bottom: "-12vh",
                 width: `${bubble.size}px`,
                 height: `${bubble.size}px`,
                 ["--bubble-rise-duration" as string]: `${bubble.duration}ms`,
@@ -83,13 +128,22 @@ export default function BubbleTransitionOverlay({ visible, variantKey = 0 }: Bub
 }
 
 /** Erzeugt eine determinierte Liste von Blasen mit zufälliger Größe/Position/Timing. */
-function createBubbleConfig(length: number): BubbleConfig[] {
+function createBubbleConfig(length: number, options?: BubbleConfigOptions): BubbleConfig[] {
+  const bounds = {
+    minSize: options?.minSize ?? MIN_SIZE,
+    maxSize: options?.maxSize ?? MAX_SIZE,
+    minDelay: options?.minDelay ?? MIN_DELAY,
+    maxDelay: options?.maxDelay ?? MAX_DELAY,
+    minDuration: options?.minDuration ?? MIN_DURATION,
+    maxDuration: options?.maxDuration ?? MAX_DURATION,
+  };
+
   return Array.from({ length }, (_, index) => ({
     id: index,
-    left: randomBetween(8, 92),
-    size: randomBetween(MIN_SIZE, MAX_SIZE),
-    delay: randomBetween(MIN_DELAY, MAX_DELAY),
-    duration: randomBetween(MIN_DURATION, MAX_DURATION),
+    left: randomBetween(-4, 104),
+    size: randomBetween(bounds.minSize, bounds.maxSize),
+    delay: randomBetween(bounds.minDelay, bounds.maxDelay),
+    duration: randomBetween(bounds.minDuration, bounds.maxDuration),
   }));
 }
 

@@ -55,7 +55,7 @@ export function TransitionOverlayProvider({ children }: { children: ReactNode })
 export function useTransitionOverlay() {
   const ctx = useContext(TransitionOverlayContext);
   if (!ctx) {
-    throw new Error("useTransitionOverlay must be used within a TransitionOverlayProvider");
+    throw new Error("useTransitionOverlay muss innerhalb eines TransitionOverlayProvider genutzt werden.");
   }
   return ctx;
 }

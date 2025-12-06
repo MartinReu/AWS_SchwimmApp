@@ -121,14 +121,18 @@ export default function TeletextHeader({ mode="MAIN" }: { mode?: Mode }) {
   }, []);
 
   return (
-    <div className="flex items-center justify-between px-4 pt-6 pb-8 tt-text text-lg sm:text-xl">
-      <div className="flex items-baseline gap-3">
-        <span className="text-[var(--tt-cyan)]">{cc}</span>
-        <span className="text-[var(--tt-cyan)]">{pad3(num)}</span>
-        <span className="text-[var(--tt-green)]">{mode}</span>
-        <span className="text-[var(--tt-fg)]">{dateStr}</span>
+    <div className="tt-header tt-text">
+      <div className="tt-header__row">
+        <div className="tt-header__left">
+          <span className="tt-header__code">{cc}</span>
+          <span className="tt-header__num">{pad3(num)}</span>
+        </div>
+        <div className="tt-header__center">
+          <span className="tt-header__mode">{mode}</span>
+          <span className="tt-header__date">{dateStr}</span>
+        </div>
+        <div className="tt-header__time tabular-nums">{timeStr}</div>
       </div>
-      <div className="font-bold text-[var(--tt-yellow)] tabular-nums">{timeStr}</div>
     </div>
   );
 

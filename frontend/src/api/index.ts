@@ -10,6 +10,7 @@ export * from "./lobbies";
 export * from "./leaderboards";
 export * from "./quotes";
 export * from "./game";
+export * from "./roundEvents";
 export * from "./types";
 
 export const api = {

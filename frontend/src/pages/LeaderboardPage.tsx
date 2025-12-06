@@ -2,7 +2,7 @@
  * Leaderboard-Seite: zeigt aggregierte Lobby-Scores, bietet Suche, Rejoin-Links und Admin-Löschfunktionen.
  * Nutzt Polling/SSE, um Einträge aktuell zu halten, und verknüpft zum Resume-Callout.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import TeletextHeader from "../components/common/TeletextHeader";
 import {
@@ -20,6 +20,7 @@ import TTPanel from "../components/common/ui/TTPanel";
 import ResumeGameCallout from "../components/common/ResumeGameCallout";
 import { loadSession } from "../utils/session";
 import { formatPoints } from "../utils/points";
+import { useLobbyDeletionGuard } from "../hooks/useLobbyDeletionGuard";
 
 const DEBOUNCE_MS = 300;
 const SUBSCRIBE_POLL_MS = 4000;
@@ -40,6 +41,11 @@ export default function LeaderboardPage() {
   const session = useMemo(() => loadSession(), []);
   // Flags, ob die Session noch aktiv ist (Rejoin-CTA).
   const [resumeConfirmed, setResumeConfirmed] = useState(false);
+  useLobbyDeletionGuard({
+    lobbyId: session?.lobbyId,
+    lobbyName: session?.lobbyName,
+    disabled: !session?.lobbyId,
+  });
 
   // Entschärfter Suchterm, damit nicht jeder Tastendruck API-Traffic erzeugt.
   const debouncedSearch = useDebounce(search, DEBOUNCE_MS);
@@ -129,10 +135,11 @@ export default function LeaderboardPage() {
       header={<TeletextHeader mode="SCORES" />}
       footer={<span className="tt-text text-xs">Lobbyismus · Alter wir haben schon {visibleEntries.length} Lobbys</span>}
     >
-      <div className="space-y-6 pb-10">
+      <div className="tt-stack pb-10 w-full max-w-4xl mx-auto">
         <TTToolbar
           title="Rangliste"
-          description="Teletext · Suche"
+          description="Lobby · Suche"
+          className="w-full"
         >
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-end sm:gap-4" role="search">
             <TTInput
@@ -145,28 +152,17 @@ export default function LeaderboardPage() {
               autoComplete="off"
               wrapperClassName="flex-1 min-w-[260px] sm:min-w-[320px]"
             />
-            <TTButton
-              type="button"
-              variant="ghost"
-              onClick={handleClear}
-              disabled={!search}
-              className="justify-center h-12 sm:min-w-[10rem] sm:self-stretch sm:ml-auto"
-            >
-              Suche löschen ✕
-            </TTButton>
           </div>
         </TTToolbar>
 
-        <ResumeGameCallout session={session} isConfirmed={resumeConfirmed} lobbyExists={sessionLobbyExists} />
+        <ResumeGameCallout
+          session={session}
+          isConfirmed={resumeConfirmed}
+          lobbyExists={sessionLobbyExists}
+          className="w-full"
+        />
 
-        <TTPanel title="Rejoin-Hinweis" eyebrow=">> Info" variant="cyan">
-          <p className="text-sm text-white">
-            Über „Rejoin“ springst du direkt zurück in deine Lobby. Mit demselben Browser-Tab klappt das sofort, auf
-            anderen Geräten wird dein Name nach ca. 30–45{"\u00a0"}Sekunden wieder frei.
-          </p>
-        </TTPanel>
-
-        <div className="space-y-3" aria-live="polite">
+        <div className="w-full space-y-3" aria-live="polite">
           {loading && (
             <p className="tt-text text-sm text-[var(--tt-text-muted)]" role="status" aria-busy="true">
               Lade Rangliste im Teletext-Takt …
@@ -186,17 +182,17 @@ export default function LeaderboardPage() {
 
           {hasNoResults && (
             <p className="tt-text text-sm font-black text-[var(--tt-secondary)]" aria-live="polite">
-              Keine Lobby gefunden.
+              Junge die Lobby gibts nich!
             </p>
           )}
         </div>
 
         {/* Rendert jede sichtbare Lobby als Panel inkl. Aktionen. */}
         <div
-          className="space-y-4 overflow-y-auto pr-1"
+          className="w-full space-y-4 sm:overflow-y-auto sm:max-h-[var(--leaderboard-max)]"
           role="list"
           aria-busy={loading}
-          style={{ maxHeight: "calc(100dvh - 14rem)" }}
+          style={{ "--leaderboard-max": "calc(100dvh - 14rem)" } as CSSProperties}
         >
           {visibleEntries.map((entry) => (
             <LobbyCard key={entry.lobbyId} lobby={entry} onDeleted={handleLobbyDeleted} />
@@ -246,7 +242,7 @@ function LobbyCard({ lobby, onDeleted }: LobbyCardProps) {
     };
   }, []);
 
-  // Prevent state updates after the card unmounts during async delete operations.
+  // Verhindert State-Updates nach dem Unmount, wenn ein asynchroner Löschvorgang noch läuft.
   const safeUpdate = useCallback((fn: () => void) => {
     if (isMountedRef.current) fn();
   }, []);
@@ -352,7 +348,7 @@ function LobbyCard({ lobby, onDeleted }: LobbyCardProps) {
     return (
       <TTPanel
         variant="cyan"
-        className="animate-pulse focus-within:ring-2 focus-within:ring-[var(--tt-secondary)]"
+        className="w-full animate-pulse focus-within:ring-2 focus-within:ring-[var(--tt-secondary)]"
         role="status"
         aria-live="assertive"
         title={lobby.lobbyName}
@@ -369,13 +365,16 @@ function LobbyCard({ lobby, onDeleted }: LobbyCardProps) {
       variant="cyan"
       title={lobby.lobbyName}
       eyebrow={`Erstellt am ${new Date(lobby.createdAt).toLocaleDateString()}`}
-      actions={
-        <div className="flex flex-wrap gap-2">
+      className="w-full focus-within:ring-2 focus-within:ring-[var(--tt-secondary)]"
+    >
+      <div className="mb-3 w-full">
+        <div className="grid w-full grid-cols-2 gap-2">
           <TTButton
             type="button"
             variant="secondary"
             onClick={handleNavigateHome}
             aria-label={`Lobby ${lobby.lobbyName} öffnen`}
+            className="w-full justify-center"
           >
             Rejoin
           </TTButton>
@@ -386,13 +385,12 @@ function LobbyCard({ lobby, onDeleted }: LobbyCardProps) {
             disabled={isDeleting}
             busy={isDeleting}
             aria-label={`Lobby ${lobby.lobbyName} löschen`}
+            className="w-full justify-center"
           >
             Löschen
           </TTButton>
         </div>
-      }
-      className="focus-within:ring-2 focus-within:ring-[var(--tt-secondary)]"
-    >
+      </div>
       {showConfirm && (
         <div
           className="mb-3 border border-[var(--tt-yellow)] bg-black/80 p-3 text-sm text-[var(--tt-yellow)]"
@@ -404,17 +402,24 @@ function LobbyCard({ lobby, onDeleted }: LobbyCardProps) {
           <p className="mt-1 text-white">
             Was weg ist, ist weg ge?
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 grid w-full grid-cols-2 gap-2">
             <TTButton
               type="button"
               variant="danger"
               onClick={handleConfirmDelete}
               disabled={isDeleting}
               busy={isDeleting}
+              className="w-full justify-center"
             >
-              Ja, endgültig löschen
+              LÖSCHEN
             </TTButton>
-            <TTButton type="button" variant="ghost" onClick={handleCancelConfirm} disabled={isDeleting}>
+            <TTButton
+              type="button"
+              variant="ghost"
+              onClick={handleCancelConfirm}
+              disabled={isDeleting}
+              className="w-full justify-center"
+            >
               Abbrechen
             </TTButton>
           </div>
@@ -510,3 +515,4 @@ function upsertEntry(list: LeaderboardEntry[], entry: LeaderboardEntry) {
     return bDate - aDate;
   });
 }
+

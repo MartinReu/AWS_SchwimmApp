@@ -10,29 +10,34 @@ const CORE_API_BASE_URL = DEFAULT_API_BASE_URL;
 /** Holt alle bekannten Lobbys vom Backend. */
 export async function listLobbies(): Promise<Lobby[]> {
   const res = await fetch(`${CORE_API_BASE_URL}/lobbies`);
-  return parseJson(res);
+  const payload = await parseJson<Lobby[]>(res);
+  return payload.map(normalizeLobbyNameEntry);
 }
 
 /** Liefert eine konkrete Lobby anhand der ID. */
 export async function getLobby(lobbyId: string): Promise<Lobby> {
   const res = await fetch(`${CORE_API_BASE_URL}/lobbies/${encodeURIComponent(lobbyId)}`);
-  return parseJson(res);
+  const payload = await parseJson<Lobby>(res);
+  return normalizeLobbyNameEntry(payload);
 }
 
 /** Erstellt eine neue Lobby mit dem angegebenen Namen. */
 export async function createLobby(name: string): Promise<Lobby> {
+  const normalizedName = name.trim().toUpperCase();
   const res = await fetch(`${CORE_API_BASE_URL}/lobbies`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name: normalizedName }),
   });
-  return parseJson(res);
+  const payload = await parseJson<Lobby>(res);
+  return normalizeLobbyNameEntry(payload);
 }
 
 /** Listet alle Spieler einer Lobby (wird laufend gepollt). */
 export async function listPlayers(lobbyId: string): Promise<Player[]> {
   const res = await fetch(`${CORE_API_BASE_URL}/players?lobbyId=${encodeURIComponent(lobbyId)}`);
-  return parseJson(res);
+  const payload = await parseJson<Player[]>(res);
+  return payload.map(normalizePlayerNameEntry);
 }
 
 type PlayerNamesResponse = { names?: string[] } | string[];
@@ -49,12 +54,24 @@ export async function fetchAllPlayerNames(): Promise<string[]> {
 function normalizePlayerNameList(raw: string[]): string[] {
   const seen = new Map<string, string>();
   raw.forEach((entry) => {
-    const trimmed = String(entry ?? "").trim();
+    const trimmed = String(entry ?? "").trim().toUpperCase();
     if (!trimmed) return;
     const normalized = trimmed.toLowerCase();
     if (!seen.has(normalized)) seen.set(normalized, trimmed);
   });
   return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+}
+
+function normalizeName(value: string) {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+
+function normalizeLobbyNameEntry(lobby: Lobby): Lobby {
+  return { ...lobby, name: normalizeName(lobby.name) };
+}
+
+function normalizePlayerNameEntry(player: Player): Player {
+  return { ...player, name: normalizeName(player.name) };
 }
 
 export type DeleteLobbyParams = {
@@ -81,12 +98,24 @@ export type JoinOrRejoinParams = {
 
 export type JoinOrRejoinErrorCode = "LOBBY_FULL" | "NAME_ACTIVE" | "NAME_TAKEN" | "MAX_PLAYERS" | "UNKNOWN";
 
+export type PlayerLifeSnapshot = {
+  id: string;
+  roundId: string;
+  playerId: string;
+  livesRemaining: number;
+  updatedAt: string;
+  roundNumber?: number;
+};
+
 export type JoinOrRejoinResponse = {
   ok: boolean;
   mode: "join" | "rejoin";
   playerId: string;
   isActive: boolean;
   player?: Player;
+   sessionId?: string | null;
+   sessionReplaced?: boolean;
+   playerLives?: PlayerLifeSnapshot | null;
   errorCode?: JoinOrRejoinErrorCode;
   message?: string;
 };
@@ -101,8 +130,7 @@ export type PresencePingParams = {
 
 const LOBBIES_BASE_URL = (
   import.meta.env.VITE_LOBBIES_API_URL ||
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4000"
+  DEFAULT_API_BASE_URL
 ).replace(/\/$/, "");
 
 const rawLeaderboardsBase = import.meta.env.VITE_LEADERBOARDS_API_URL;
@@ -154,15 +182,18 @@ export async function joinOrRejoin({
     throw new Error("Lobby-ID oder Name erforderlich.");
   }
 
+  const normalizedLobbyName = lobbyName?.trim().toUpperCase();
+  const normalizedPlayerName = playerName.trim().toUpperCase();
+
   const payload = JSON.stringify({
-    name: playerName,
+    name: normalizedPlayerName,
     ...(clientSessionId ? { clientSessionId } : {}),
     ...(forceRejoin ? { forceRejoin: true } : {}),
   });
 
   const candidates: RequestCandidate[] = [];
   const headers = { "Content-Type": "application/json" };
-  const context = { lobbyId, lobbyName, playerName };
+  const context = { lobbyId, lobbyName: normalizedLobbyName ?? lobbyName, playerName: normalizedPlayerName };
 
   if (lobbyId) {
     const encodedId = encodeURIComponent(lobbyId);
@@ -172,8 +203,8 @@ export async function joinOrRejoin({
     );
   }
 
-  if (lobbyName) {
-    const encodedName = encodeURIComponent(lobbyName);
+  if (normalizedLobbyName || lobbyName) {
+    const encodedName = encodeURIComponent(normalizedLobbyName ?? lobbyName ?? "");
     candidates.push(
       { path: `/lobbies/by-name/${encodedName}/join-or-rejoin`, method: "POST", headers, body: payload },
       { path: `/lobbies/by-name/${encodedName}/join`, method: "POST", headers, body: payload }
@@ -681,6 +712,9 @@ type JoinPayload = {
   playerId?: string;
   isActive?: boolean;
   player?: PlayerLike;
+  sessionId?: string | null;
+  sessionReplaced?: boolean;
+  playerLives?: unknown;
   errorCode?: string;
   message?: string;
 };
@@ -712,6 +746,9 @@ function normalizeJoinOrRejoinPayload(payload: unknown, context: JoinPayloadCont
     const playerId = typed.playerId || player?.id || "";
     const isActive =
       typeof typed.isActive === "boolean" ? typed.isActive : player ? player.isActive !== false : true;
+    const sessionId = parseSessionId(typed.sessionId);
+    const sessionReplaced = typed.sessionReplaced === true;
+    const playerLives = normalizePlayerLives(typed.playerLives);
 
     if (ok && !playerId) {
       throw new Error("Antwort ohne Spieler-Referenz.");
@@ -723,6 +760,9 @@ function normalizeJoinOrRejoinPayload(payload: unknown, context: JoinPayloadCont
       playerId,
       isActive,
       player,
+      sessionId,
+      sessionReplaced,
+      playerLives,
       errorCode,
       message: typeof typed.message === "string" ? typed.message : undefined,
     };
@@ -752,15 +792,44 @@ function looksLikePlayerPayload(payload: unknown): payload is PlayerLike {
 function normalizePlayerPayload(player: PlayerLike, context: JoinPayloadContext, fallbackId?: string): Player {
   const id = player.id ?? fallbackId;
   if (!id) throw new Error("Spieler-ID fehlt in der Serverantwort.");
-  const cleanName = typeof player.name === "string" && player.name.trim().length > 0 ? player.name : context.playerName;
+  const rawName =
+    typeof player.name === "string" && player.name.trim().length > 0 ? player.name : context.playerName;
+  const cleanName = (rawName ?? "").toString().trim().toUpperCase();
   const normalizedPlayer: Player = {
     id,
-    name: cleanName,
+    name: cleanName || context.playerName,
     lobbyId: player.lobbyId ?? context.lobbyId ?? "",
     joinedAt: player.joinedAt ?? new Date().toISOString(),
     ...(typeof player.isActive === "boolean" ? { isActive: player.isActive } : {}),
   };
   return normalizedPlayer;
+}
+
+function parseSessionId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizePlayerLives(value: unknown): PlayerLifeSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const entry = value as Partial<PlayerLifeSnapshot>;
+  if (
+    typeof entry.id !== "string" ||
+    typeof entry.roundId !== "string" ||
+    typeof entry.playerId !== "string" ||
+    typeof entry.livesRemaining !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    id: entry.id,
+    roundId: entry.roundId,
+    playerId: entry.playerId,
+    livesRemaining: entry.livesRemaining,
+    updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : new Date().toISOString(),
+    ...(typeof entry.roundNumber === "number" ? { roundNumber: entry.roundNumber } : {}),
+  };
 }
 
 function parseJoinErrorCode(value: unknown): JoinOrRejoinErrorCode | undefined {

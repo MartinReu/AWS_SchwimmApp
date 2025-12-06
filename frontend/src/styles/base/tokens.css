@@ -19,6 +19,9 @@
     --tt-danger: #ff3131;
     --tt-border: #222222;
     --tt-border-strong: #3b3b3b;
+    --tt-shell-max: 1180px;
+    --tt-shell-inner: 960px;
+    --tt-shell-pad: clamp(1rem, 2.5vw + 0.25rem, 1.75rem);
     --tt-focus: #ffffff;
     --tt-shadow: 0 4px 0 #0a0a0a;
     --tt-green: #00ff00;
@@ -42,6 +45,7 @@
     :root {
       --tt-header-h: 5.5rem;
       --tt-footer-h: 3.25rem;
+      --tt-shell-inner: 1040px;
     }
   }
 }

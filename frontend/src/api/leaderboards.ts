@@ -3,6 +3,7 @@
  * Nutzt VITE_LEADERBOARDS_API_URL wenn gesetzt, sonst die klassischen REST-Routen der Mock-API.
  * Stellt sowohl Fetching als auch ein optionales SSE/Polling-Abonnement bereit.
  */
+import { DEFAULT_API_BASE_URL } from "./http";
 
 export type LeaderboardPlayerEntry = {
   id: string;
@@ -23,12 +24,10 @@ export type FetchLeaderboardsParams = {
   signal?: AbortSignal;
 };
 
-const DEFAULT_BASE_URL = (import.meta.env.VITE_LEADERBOARDS_API_URL ||
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4000"
-).replace(/\/$/, "");
+const leaderboardsBaseEnv = (import.meta.env.VITE_LEADERBOARDS_API_URL || "").trim();
+const DEFAULT_BASE_URL = (leaderboardsBaseEnv || DEFAULT_API_BASE_URL).replace(/\/$/, "");
 
-const HAS_DEDICATED_ENDPOINT = Boolean(import.meta.env.VITE_LEADERBOARDS_API_URL);
+const HAS_DEDICATED_ENDPOINT = Boolean(leaderboardsBaseEnv);
 
 /** Holt Leaderboard-Einträge, optional nach Lobbynamen gefiltert. */
 export async function fetchLeaderboards({
@@ -198,6 +197,7 @@ function normalizeEntry(item: unknown): LeaderboardEntry | null {
   const lobbyId = lobby.lobbyId || lobby.id;
   const lobbyName = lobby.lobbyName || lobby.name;
   if (!lobbyId || !lobbyName) return null;
+  const normalizedLobbyName = lobbyName.toUpperCase();
   const rounds =
     typeof lobby.rounds === "number"
       ? lobby.rounds
@@ -219,10 +219,11 @@ function normalizeEntry(item: unknown): LeaderboardEntry | null {
             const id = player.id;
             const name = player.name;
             if (!id || !name) return null;
+            const normalizedName = name.toUpperCase();
             const total = resolvePoints(player);
             return {
               id,
-              name,
+              name: normalizedName,
               pointsTotal: total,
             };
           })
@@ -231,7 +232,7 @@ function normalizeEntry(item: unknown): LeaderboardEntry | null {
 
   return {
     lobbyId,
-    lobbyName,
+    lobbyName: normalizedLobbyName,
     players,
     createdAt: lobby.createdAt || new Date().toISOString(),
     rounds,

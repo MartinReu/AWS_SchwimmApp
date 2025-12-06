@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Game-Ansicht inkl. Lives, Spielerlisten und Slider zum Rundenabschluss.
  * Kümmert sich um Session-Persistenz, Presence-Pings, Auto-Boot im DEV und um alle Redirects zwischen Lose/Win.
  */
@@ -13,14 +13,15 @@ import { api, LifeState, Player, Round, Score } from "../api";
 import { useLobbyParams } from "../hooks/useLobbyParams";
 import { useRoundParams } from "../hooks/useRoundParams";
 import { losePath, roundPath, winPath, withSearch } from "../utils/paths";
-import { getClientSessionId, loadSession, storeSession, updateSession, type ResumeView } from "../utils/session";
+import { getClientSessionId, loadSession, persistClientSessionId, storeSession, updateSession, type ResumeView } from "../utils/session";
 import RootLayout from "../components/common/layout/RootLayout";
-import TTToolbar from "../components/common/ui/TTToolbar";
 import TTPanel from "../components/common/ui/TTPanel";
 import TTButton from "../components/common/ui/TTButton";
+import TTPanelCollapsible from "../components/common/ui/TTPanelCollapsible";
 import { useJoinOrRejoin, isJoinMutationError } from "../hooks/useJoinOrRejoin";
 import { startPresence } from "../lib/sessionPresence";
 import RouteGuardNotice from "../components/common/RouteGuardNotice";
+import { useLobbyDeletionGuard } from "../hooks/useLobbyDeletionGuard";
 
 const AUTO_BOOT = import.meta.env.VITE_DEV_AUTO_BOOT === "1";
 
@@ -36,9 +37,11 @@ export default function GamePage() {
   const queryPlayerName = sp.get("playerName") || "";
 
   const sessionSeed = useMemo(() => loadSession(), []);
-  const clientSessionId = useMemo(
-    () => sessionSeed?.clientSessionId ?? getClientSessionId() ?? undefined,
-    [sessionSeed]
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
+  const [clientSessionId, setClientSessionId] = useState<string | undefined>(
+    () => sessionSeed?.clientSessionId ?? getClientSessionId() ?? undefined
   );
   const hasPlayerContext = Boolean(queryPlayerId || sessionSeed?.playerId);
   const hasLobbyContext = Boolean(routeLobbyName || lobbyIdFromParams || sessionSeed?.lobbyName || sessionSeed?.lobbyId);
@@ -46,9 +49,29 @@ export default function GamePage() {
 
   const [lobbyId, setLobbyId] = useState(() => lobbyIdFromParams || sessionSeed?.lobbyId || "");
   const [playerId, setPlayerId] = useState(() => queryPlayerId || sessionSeed?.playerId || "");
-  const [playerName] = useState(() => sessionSeed?.playerName || queryPlayerName || getOrMakePlayerName());
+  const [playerName] = useState(
+    () => (sessionSeed?.playerName || queryPlayerName || getOrMakePlayerName()).trim().toUpperCase()
+  );
 
-  const [lobbyTitle, setLobbyTitle] = useState(routeLobbyName || sessionSeed?.lobbyName || "");
+  const applySessionId = useCallback(
+    (nextId?: string | null) => {
+      if (!nextId || !nextId.trim()) return;
+      const normalized = persistClientSessionId(nextId) ?? nextId.trim();
+      setClientSessionId(normalized);
+      if (sessionRef.current) {
+        sessionRef.current = {
+          ...sessionRef.current,
+          clientSessionId: normalized,
+          updatedAt: Date.now(),
+        };
+      }
+    },
+    []
+  );
+
+  const [lobbyTitle, setLobbyTitle] = useState(
+    (routeLobbyName || sessionSeed?.lobbyName || "").toUpperCase()
+  );
   const [round, setRound] = useState<Round | null>(null);
   const [lives, setLives] = useState<LifeState[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
@@ -56,6 +79,7 @@ export default function GamePage() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [booting, setBooting] = useState(true);
+  const [leaderCelebrationKey, setLeaderCelebrationKey] = useState(0);
 
   const startingRoundRef = useRef(false);
   const forcedLoseRoundRef = useRef<number | null>(null);
@@ -74,7 +98,11 @@ export default function GamePage() {
     [myLife, isRunning]
   );
 
-  const effectiveLobbyName = lobbyTitle || routeLobbyName || sessionRef.current?.lobbyName || "";
+  const effectiveLobbyName = lobbyTitle || routeLobbyName?.toUpperCase() || sessionRef.current?.lobbyName || "";
+  const { handleLobbyMissingError } = useLobbyDeletionGuard({
+    lobbyId,
+    lobbyName: effectiveLobbyName,
+  });
 
   type SessionPersistPartial = {
     lobbyId?: string;
@@ -83,6 +111,7 @@ export default function GamePage() {
     playerName?: string;
     resumeView?: ResumeView | null;
     resumeRoundNumber?: number | null;
+    clientSessionId?: string | null;
   };
 
   /**
@@ -107,8 +136,14 @@ export default function GamePage() {
             ? prev?.resumeRoundNumber
             : partial.resumeRoundNumber ?? null,
       };
-      const withSessionId = clientSessionId ? { ...payload, clientSessionId } : payload;
-      const nextPayload = { ...withSessionId, resumeEligible: true };
+      const sessionToken = partial.clientSessionId ?? clientSessionId ?? prev?.clientSessionId;
+      const withSessionId = sessionToken ? { ...payload, clientSessionId: sessionToken } : payload;
+      const nextPayload = {
+        ...withSessionId,
+        resumeEligible: true,
+        lobbyName: (withSessionId.lobbyName ?? "").toUpperCase(),
+        playerName: (withSessionId.playerName ?? "").toUpperCase(),
+      };
 
       if (!payload.lobbyId || !payload.lobbyName || !payload.playerId || !payload.playerName) {
         return;
@@ -153,6 +188,7 @@ export default function GamePage() {
     }
   }, [lobbyId, persistSession, routeLobbyName]);
 
+  // DEV-Autoboot: legt eine eigene Lobby an, wenn keine existiert und AUTO_BOOT aktiv ist.
   useEffect(() => {
     let alive = true;
     const doAutoBoot = async () => {
@@ -161,18 +197,22 @@ export default function GamePage() {
         setBooting(true);
         const devName = `DEV-${new Date().toLocaleTimeString("de-DE", { hour12: false })}`;
         const lb = await api.createLobby(devName);
-        const { player: me } = await performJoinOrRejoin({
+        const { player: me, sessionId: serverSessionId } = await performJoinOrRejoin({
           lobbyId: lb.id,
           lobbyName: lb.name,
           playerName,
           clientSessionId,
         });
 
+        if (serverSessionId) {
+          applySessionId(serverSessionId);
+        }
+
         if (!alive) return;
         persistSession({ lobbyId: lb.id, lobbyName: lb.name, playerId: me.id, playerName });
         setLobbyId(lb.id);
         setPlayerId(me.id);
-        setLobbyTitle(lb.name);
+        setLobbyTitle(lb.name.toUpperCase());
         setErr(null);
         navigate(roundPath({ lobbyName: lb.name, lobbyId: lb.id }), { replace: true });
       } catch (e: any) {
@@ -185,8 +225,9 @@ export default function GamePage() {
     return () => {
       alive = false;
     };
-  }, [clientSessionId, lobbyId, navigate, performJoinOrRejoin, persistSession, playerName]);
+  }, [applySessionId, clientSessionId, lobbyId, navigate, performJoinOrRejoin, persistSession, playerName]);
 
+  // Hauptinitialisierung + Polling: lädt Lobby, Runde, Lives und Spieler und hält diese Werte aktuell.
   useEffect(() => {
     if (!lobbyId) return;
     let alive = true;
@@ -201,7 +242,7 @@ export default function GamePage() {
         const [lb, ps] = await Promise.all([api.getLobby(lobbyId), api.listPlayers(lobbyId)]);
         if (!alive) return;
 
-        setLobbyTitle(lb.name);
+        setLobbyTitle(lb.name.toUpperCase());
         persistSession({ lobbyName: lb.name });
 
         if (!playerId) {
@@ -218,6 +259,7 @@ export default function GamePage() {
         setPlayers(ps);
         setErr(null);
       } catch (e: any) {
+        if (handleLobbyMissingError(e)) return;
         if (alive) setErr(e?.message ?? "Fehler beim Start");
       } finally {
         if (alive) setBooting(false);
@@ -226,7 +268,7 @@ export default function GamePage() {
 
     init();
 
-    const t = setInterval(async () =>{
+    const t = setInterval(async () => {
       try {
         const [lb, current, ps] = await Promise.all([
           api.getLobby(lobbyId),
@@ -234,7 +276,7 @@ export default function GamePage() {
           api.listPlayers(lobbyId),
         ]);
         if (!alive) return;
-        setLobbyTitle(lb.name);
+        setLobbyTitle(lb.name.toUpperCase());
         setRound(current.round);
         setLives(current.lives);
         setScores(current.scores);
@@ -247,8 +289,8 @@ export default function GamePage() {
             persistSession({ playerId: me.id });
           }
         }
-      } catch {
-        /* polling errors werden ignoriert */
+      } catch (error) {
+        if (handleLobbyMissingError(error)) return;
       }
     }, 2000);
 
@@ -256,7 +298,7 @@ export default function GamePage() {
       alive = false;
       clearInterval(t);
     };
-  }, [lobbyId, playerId, playerName, persistSession]);
+  }, [handleLobbyMissingError, lobbyId, playerId, playerName, persistSession]);
 
   useEffect(() => {
     if (!lobbyId || !playerId || !clientSessionId) return;
@@ -271,8 +313,15 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!round || round.state !== "finished" || !round.winnerPlayerId || !effectiveLobbyName) return;
+    persistSession({ resumeView: "win", resumeRoundNumber: round.number ?? null });
     navigate(winPath({ lobbyName: effectiveLobbyName, lobbyId }));
-  }, [effectiveLobbyName, lobbyId, navigate, round?.state, round?.winnerPlayerId]);
+  }, [effectiveLobbyName, lobbyId, navigate, persistSession, round?.number, round?.state, round?.winnerPlayerId]);
+
+  useEffect(() => {
+    if (!round || round.state !== "running") return;
+    if (sessionRef.current?.resumeView !== "win") return;
+    persistSession({ resumeView: null, resumeRoundNumber: round.number ?? null });
+  }, [persistSession, round?.number, round?.state]);
 
   const myLifeValue = myLife?.livesRemaining ?? 4;
 
@@ -314,14 +363,15 @@ export default function GamePage() {
     const normalizedName = normalizePlayerName(pname);
     const ps = await api.listPlayers(lobbyId);
     const existing = ps.find((p) => normalizePlayerName(p.name) === normalizedName);
-    if (existing) return existing;
     try {
-      const { player } = await performJoinOrRejoin({
+      const { player, sessionId: serverSessionId } = await performJoinOrRejoin({
         lobbyId,
         lobbyName: lobbyTitle || routeLobbyName || sessionRef.current?.lobbyName,
-        playerName: pname,
+        playerName: existing?.name ?? pname,
         clientSessionId,
+        forceRejoin: true,
       });
+      if (serverSessionId) applySessionId(serverSessionId);
       return player;
     } catch (error) {
       if (isJoinMutationError(error)) {
@@ -331,7 +381,7 @@ export default function GamePage() {
           error.code === "LOBBY_FULL" ||
           error.code === "MAX_PLAYERS"
         ) {
-          return resolveExistingPlayerRecord(lobbyId, normalizedName);
+          return existing ?? resolveExistingPlayerRecord(lobbyId, normalizedName);
         }
       }
       throw error;
@@ -350,7 +400,7 @@ export default function GamePage() {
       prev.map((l) => (l.playerId === prevLivesEntry.playerId ? { ...l, livesRemaining: nextLives } : l))
     );
     try {
-      const updated = await api.updateLife(round.id, prevLivesEntry.playerId, nextLives);
+      const updated = await api.updateLife(round.id, prevLivesEntry.playerId, nextLives, clientSessionId);
       setLives((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
       setErr(null);
     } catch (e: any) {
@@ -368,7 +418,7 @@ export default function GamePage() {
     if (!round || !playerId || !effectiveLobbyName) return;
     setBusy(true);
     try {
-      const r = await api.finishRound(round.id, playerId);
+      const r = await api.finishRound(round.id, playerId, clientSessionId);
       setRound(r.round);
       setScores(r.scores);
       setErr(null);
@@ -411,8 +461,9 @@ export default function GamePage() {
   }, [myLife?.livesRemaining, persistSession, round?.number]);
 
   const playerCounter = String(players.length).padStart(2, "0");
-  const roundLabel = round?.number ? round.number.toString().padStart(2, "0") : "–";
-  const lobbyDisplayName = booting ? "Lade Lobby …" : (lobbyTitle || routeLobbyName || "Unbenannte Lobby");
+  const roundLabel = round?.number ? round.number.toString().padStart(2, "0") : "-";
+  const lobbyDisplayName = booting ? "Lade Lobby ..." : (lobbyTitle || routeLobbyName?.toUpperCase() || "Unbenannte Lobby");
+  const contentFrameClass = "w-full max-w-4xl mx-auto px-2 sm:px-4";
 
   useEffect(() => {
     if (!isRunning || (myLife && myLife.livesRemaining > 0)) {
@@ -435,48 +486,54 @@ export default function GamePage() {
       header={<TeletextHeader mode="GAME" />}
       footer={<span className="tt-text text-xs">Lobby-Zugriff nötig</span>}
     >
-      <RouteGuardNotice
-        title="Spiel nicht erreichbar"
-        description="Kein Spieler- oder Lobby-Kontext gefunden. Bitte tritt zuerst über die Lobby-Seite bei, damit wir dich eindeutig zuordnen können."
-        actionLabel="Zur Lobby"
-        actionTo="/"
-      />
+      <div className={`tt-stack pb-10 ${contentFrameClass}`}>
+        <RouteGuardNotice
+          title="Spiel nicht erreichbar"
+          description="Kein Spieler- oder Lobby-Kontext gefunden. Bitte tritt zuerst über die Lobby-Seite bei, damit wir dich eindeutig zuordnen können."
+          actionLabel="Zur Lobby"
+          actionTo="/"
+        />
+      </div>
     </RootLayout>
   ) : (
     <RootLayout
       header={<TeletextHeader mode="GAME" />}
-      footer={<span className="tt-text text-xs">Lobby: {effectiveLobbyName || "–"}</span>}
+      footer={<span className="tt-text text-xs">Lobby: {effectiveLobbyName || "-"}</span>}
     >
-      <div className="space-y-6 pb-10 bg-black">
-        <TTToolbar
-          title={lobbyDisplayName}
-          description={`Runde ${roundLabel} · ${playerCounter}/08 Spieler im Boot`}
-          actions={
-            <>
-              <TTButton as={Link} to="/" variant="ghost" className="justify-center">
+      <div className={`tt-stack pb-10`}>
+        <TTPanelCollapsible
+          title={lobbyDisplayName || "Unbenannte Lobby"}
+          eyebrow=">> DU HAST OPTIONEN 666"
+          initialExpanded={false}
+          variant="default"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="tt-toolbar__description m-0">{`Runde ${roundLabel} - ${playerCounter}/08 Spieler im Boot`}</p>
+            <div className="flex w-full flex-wrap justify-center gap-2 sm:w-auto sm:justify-end">
+              <TTButton as={Link} to="/" variant="ghost" className="w-full justify-center sm:w-auto">
                 Home
               </TTButton>
-              <TTButton as={Link} to="/leaderboard" variant="secondary" className="justify-center">
+              <TTButton as={Link} to="/leaderboard" variant="secondary" className="w-full justify-center sm:w-auto">
                 Rangliste
               </TTButton>
-            </>
-          }
-        />
+            </div>
+          </div>
+        </TTPanelCollapsible>
 
-        <TTPanel title="So siehts aus" eyebrow=">> Lagebericht" variant="cyan">
+        <TTPanel title="So siehts aus" eyebrow=">> Lagebericht 321" variant="cyan">
           <div className="flex flex-wrap items-baseline justify-between gap-4">
-            <div className="tt-text text-4xl font-black uppercase tracking-[0.2em] text-[var(--tt-secondary)]">
+            <div className="tt-text text-3xl sm:text-4xl font-black uppercase tracking-[0.2em] text-[var(--tt-secondary)]">
               Runde
             </div>
-            <div className="tt-text text-6xl font-black text-white tabular-nums">{roundLabel}</div>
+            <div className="tt-text text-5xl sm:text-6xl font-black text-white tabular-nums">{roundLabel}</div>
           </div>
           <p className="mt-2 text-sm uppercase tracking-[0.2em] text-[var(--tt-text-muted)]">
-            {isRunning ? "Runde läuft – bleib fokussiert" : "Warte auf Ergebnis – einmal tief durchatmen."}
+            {isRunning ? "Runde läuft - bleib fokussiert" : "Warte auf Ergebnis - einmal tief durchatmen."}
           </p>
         </TTPanel>
 
         {!showSchwimmst ? (
-          <TTPanel title="Leben" eyebrow=">> Justiere" variant="magenta" className="tt-transparent-panel">
+          <TTPanel title="Leben" eyebrow=">> Justiere 456" variant="magenta" className="tt-transparent-panel">
             <LifeSticks
               className="mt-2"
               lives={myLifeValue}
@@ -486,30 +543,39 @@ export default function GamePage() {
             />
           </TTPanel>
         ) : (
-          <TTPanel title="Reiß dich zamm!" eyebrow=">> Letzte Chance" variant="danger">
+          <TTPanel title="Reiß dich zamm!" eyebrow=">> Letzte Chance 000" variant="danger">
             <SchwimmstBanner className="mt-2" onBubblesClick={openLose} />
           </TTPanel>
         )}
 
-        <TTPanel title="Spieler:innen" eyebrow=">> Reihenfolge" variant="cyan" className="tt-transparent-panel">
-          <div className="flex items-center justify-between text-sm uppercase tracking-[0.2em] text-[var(--tt-text-muted)]">
-            <span>
+        <TTPanel title="Spieler:innen" eyebrow=">> Reihenfolge 1010" variant="cyan" className="tt-transparent-panel">
+          <div className="flex items-center justify-between gap-3 text-sm uppercase tracking-[0.2em] text-[var(--tt-text-muted)]">
+            <span className="text-left">
               <span className="tabular-nums text-white">{playerCounter}</span>/08 Spieler
             </span>
-            <span>{scores.length ? "Punkte Ticker" : "Noch keine Punkte eingetrudelt"}</span>
+            <span className="ml-auto pr-2 text-right">
+              {scores.length ? "Punkte Ticker" : "Noch keine Punkte eingetrudelt"}
+            </span>
           </div>
           <GamePlayerList
-            className="tt-scroll-area mt-3 pr-1"
+            className="mt-3 w-full"
             players={players}
             scores={scores}
             maxVisible={4}
             currentPlayerId={playerId || undefined}
             currentPlayerName={playerName || undefined}
+            leaderCelebrationKey={leaderCelebrationKey}
           />
         </TTPanel>
 
-        <TTPanel title="Runde melden" eyebrow=">> Gewinner durchgeben" variant="danger" className="tt-transparent-panel">
-          <EndRoundSlider onComplete={finishByWinner} disabled={busy || booting || !playerId} />
+        <TTPanel title="Runde melden" eyebrow=">> Gewinner durchgeben 999" variant="danger" className="tt-transparent-panel">
+          <EndRoundSlider
+            onComplete={() => {
+              setLeaderCelebrationKey((key) => key + 1);
+              finishByWinner();
+            }}
+            disabled={busy || booting || !playerId}
+          />
         </TTPanel>
 
         {err && (
@@ -525,13 +591,13 @@ export default function GamePage() {
 /** Liefert einen zufälligen Spielernamen als lokaler Fallback. */
 function getOrMakePlayerName(): string {
   const key = "schwimm_playerName";
-  const fallback = () => `Spieler_${Math.floor(Math.random() * 900 + 100)}`;
+  const fallback = () => `SPIELER_${Math.floor(Math.random() * 900 + 100)}`;
   try {
     if (typeof window === "undefined" || !("localStorage" in window)) {
       return fallback();
     }
     const stored = window.localStorage.getItem(key);
-    if (stored) return stored;
+    if (stored) return stored.toUpperCase();
     const generated = fallback();
     window.localStorage.setItem(key, generated);
     return generated;

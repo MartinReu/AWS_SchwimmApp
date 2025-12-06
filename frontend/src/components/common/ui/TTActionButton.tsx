@@ -18,7 +18,7 @@ export default function TTActionButton({
   ...rest
 }: PropsWithChildren<Props>) {
   const base =
-    "rounded-none px-5 py-4 font-extrabold tracking-wide tt-text text-lg shadow-sm active:translate-y-[1px] transition disabled:opacity-60";
+    "rounded-none px-4 py-3 font-extrabold tracking-wide tt-text text-base sm:text-lg shadow-sm active:translate-y-[1px] transition disabled:opacity-60";
   const variants: Record<NonNullable<Props["variant"]>, string> = {
     green: "bg-[var(--tt-green)] text-black",
     red: "bg-[var(--tt-red)] text-[var(--tt-yellow)]",

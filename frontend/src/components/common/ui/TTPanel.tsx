@@ -14,7 +14,8 @@ type TTPanelProps = PropsWithChildren<{
   variant?: PanelVariant;
   className?: string;
   bodyClassName?: string;
-}> &
+}> 
+&
   HTMLAttributes<HTMLElement>;
 
 /** Rahmenkomponente für Teletext-Boxen inkl. Eyebrow, Titel und Aktionsleiste. */
@@ -28,6 +29,7 @@ export default function TTPanel({
   children,
   ...rest
 }: TTPanelProps) {
+
   return (
     <section
       {...rest}

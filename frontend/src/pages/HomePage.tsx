@@ -5,6 +5,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import clsx from "clsx";
 import TeletextHeader from "../components/common/TeletextHeader";
 import LobbyLogo from "../components/lobby/LobbyLogo";
 import LobbyQuoteBox from "../components/lobby/LobbyQuoteBox";
@@ -15,7 +16,7 @@ import { roundPath } from "../utils/paths";
 import RootLayout from "../components/common/layout/RootLayout";
 import TTButton from "../components/common/ui/TTButton";
 import TTPanel from "../components/common/ui/TTPanel";
-import TTToolbar from "../components/common/ui/TTToolbar";
+import TTPanelCollapsible from "../components/common/ui/TTPanelCollapsible";
 import { useJoinOrRejoin, getJoinErrorMessage } from "../hooks/useJoinOrRejoin";
 import ResumeGameCallout from "../components/common/ResumeGameCallout";
 import { usePlayerSession } from "../context/PlayerSessionContext";
@@ -23,7 +24,7 @@ import { usePlayerSession } from "../context/PlayerSessionContext";
 const MAX_LOBBY_NAME = 22;
 const MAX_PLAYER_NAME = 18;
 const ENABLE_REJOIN_MODE = String(import.meta.env.VITE_ENABLE_REJOIN_MODE ?? "true").toLowerCase() !== "false";
-const UNSAFE_NAME_PATTERN = /[<>]/; // Primitive XSS-Blocke – keine spitzen Klammern in User-Input.
+const UNSAFE_NAME_PATTERN = /[<>]/; // Primitive XSS-Blocker – keine spitzen Klammern in User-Input.
 
 /** Home/Lobby-Steuerung: listet Lobbys, ermöglicht Join/Rejoin und zeigt Resume-CTA. */
 export default function HomePage() {
@@ -31,8 +32,11 @@ export default function HomePage() {
   const location = useLocation();
   const { currentPlayerName, logout } = usePlayerSession();
   const session = useMemo(() => loadSession(), []);
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
   const resolvedPlayerName = useMemo(
-    () => (currentPlayerName || session?.playerName || "").trim(),
+    () => (currentPlayerName || session?.playerName || "").trim().toUpperCase(),
     [currentPlayerName, session?.playerName]
   );
   const displayPlayerName = resolvedPlayerName ? resolvedPlayerName.toUpperCase() : "";
@@ -42,7 +46,7 @@ export default function HomePage() {
     [location]
   );
   const isRejoinMode = Boolean(rejoinPayload);
-  const rejoinLobbyName = rejoinPayload?.lobbyName ?? null;
+  const rejoinLobbyName = rejoinPayload?.lobbyName ? rejoinPayload.lobbyName.toUpperCase() : null;
   const rejoinLobbyId = rejoinPayload?.lobbyId ?? null;
   // Cache der verfügbaren Lobbys aus dem Backend.
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
@@ -143,18 +147,18 @@ export default function HomePage() {
 
   // Text-Optionen für das Lobby-Dropdown (nur Lobbys, in denen der Spieler existiert, plus Rejoin-Fallback).
   const lobbyOptions = useMemo(() => {
-    const base = allowedLobbies.map((l) => l.name);
-    if (isRejoinMode && rejoinPayload?.lobbyName && !base.includes(rejoinPayload.lobbyName)) {
-      return [rejoinPayload.lobbyName, ...base];
+    const base = allowedLobbies.map((l) => l.name.toUpperCase());
+    if (isRejoinMode && rejoinLobbyName && !base.includes(rejoinLobbyName)) {
+      return [rejoinLobbyName, ...base];
     }
     return base;
-  }, [allowedLobbies, isRejoinMode, rejoinPayload?.lobbyName]);
+  }, [allowedLobbies, isRejoinMode, rejoinLobbyName]);
   // Gesuchte Lobby anhand normalisierter Namen wiederfinden.
   const selectedLobby = useMemo(() => {
     const normalized = normalize(lobbyName);
     return lobbies.find(l => normalize(l.name) === normalized) || null;
   }, [lobbies, lobbyName]);
-  const fallbackLobbyTarget = rejoinLobbyId && rejoinPayload ? { id: rejoinLobbyId, name: rejoinPayload.lobbyName } : null;
+  const fallbackLobbyTarget = rejoinLobbyId && rejoinPayload ? { id: rejoinLobbyId, name: rejoinLobbyName ?? rejoinPayload.lobbyName } : null;
   const lobbyTarget = (selectedLobby ?? fallbackLobbyTarget) || null;
   const resolvedLobbyId = lobbyTarget?.id ?? null;
   // Lookup-Tabelle Spielername → Player (normalisiert für Case-Insensitive-Vergleich).
@@ -248,15 +252,15 @@ export default function HomePage() {
   /** Legt eine neue Lobby an und hängt sie optimistisch an die bestehende Liste. */
   async function createLobby() {
     setMsg(null);
-    const trimmedName = lobbyName.trim();
-    if (errLobby || !trimmedName) return;
-    if (hasUnsafeCharacters(trimmedName)) {
+    const normalizedName = lobbyName.trim().toUpperCase();
+    if (errLobby || !normalizedName) return;
+    if (hasUnsafeCharacters(normalizedName)) {
       setErrLobby("Dieser Name enthält blockierte Zeichen (< oder >).");
       return;
     }
     setBusyCreate(true);
     try {
-      const lobby = await api.createLobby(trimmedName);
+      const lobby = await api.createLobby(normalizedName);
       setMsg(`Lobby „${lobby.name}“ steht bereit.`);
       setLobbies((prev) => [lobby, ...prev.filter((entry) => entry.id !== lobby.id)]);
     } catch (e: any) {
@@ -371,51 +375,16 @@ export default function HomePage() {
       header={<TeletextHeader />}
       footer={<span className="tt-text text-xs">Schwimm Bruder · Schwimm</span>}
     >
-      <div className="space-y-8 pb-8">
-        <TTToolbar
-          title="Lobby-Kommando"
-          description={
-            isRejoinMode
-              ? "Wiederbeitritt aktiv – schnapp dir deinen alten Slot."
-              : "Starte eine neue Runde oder spring in eine laufende Lobby."
-          }
-          actions={
-            <div className="flex flex-wrap gap-2">
-              <TTButton
-                variant="ghost"
-                onClick={handleLogout}
-                className="justify-center"
-              >
-                Logout
-              </TTButton>
-              <TTButton
-                as={Link}
-                to="/leaderboard"
-                variant="secondary"
-                className="justify-center"
-              >
-                Rangliste
-              </TTButton>
-            </div>
-          }
-        >
-          <div className="tt-text text-xs font-black uppercase tracking-[0.3em] text-[var(--tt-text-muted)]">
-            {String(lobbies.length).padStart(2, "0")} Lobbys · {String(activePlayerCount).padStart(2, "0")}/08 aktiv
-          </div>
-        </TTToolbar>
-
+      <div className="tt-stack pb-10">
         <LobbyLogo />
-        <TTPanel
-          title="Willkommen"
-          eyebrow=">> Spieler"
-          variant="magenta"
-        >
+
+        <TTPanel title="Willkommen" eyebrow=">> Spieler 1000" variant="magenta">
           <div className="space-y-2">
             <p className="tt-text text-lg font-black text-white">
-              Willkommen{displayPlayerName ? `, ${displayPlayerName}` : ""}!
+              Na Moin{displayPlayerName ? `, ${displayPlayerName}` : ""}!
             </p>
             <p className="text-sm text-[var(--tt-text-muted)]">
-              Lobbys, in denen du schon unterwegs warst, erreicht du über die Rangliste.
+              Lobbys, in denen du schon unterwegs warst, erreichst du über die Rangliste.
             </p>
           </div>
           {resolvedLobbyId && (
@@ -438,70 +407,97 @@ export default function HomePage() {
               )}
               {isRejoinMode && !playersLoading && !playersError && (
                 <p className="text-sm text-[var(--tt-text-muted)]">
-                  Tipp: Wenn du denselben Tab nutzt, bist du sofort wieder drin. Ansonsten wird dein Name nach ca.
-                  30–45{"\u00a0"}Sekunden automatisch freigeschaufelt.
+                  Tipp: Nutze den gleichen Tab wie zuletzt.
                 </p>
               )}
               {allPlayersStillActive && !playersLoading && !playersError && (
                 <p className="text-sm text-[var(--tt-danger)]">
-                  Alle Namen sind noch aktiv. Warte kurz oder greif zu dem Gerät, auf dem du zuletzt unterwegs warst.
+                  Rejoin über Lobby Namen & Beitritt
                 </p>
               )}
-              {playerListEmpty && (
-                <p className="text-sm text-[var(--tt-text-muted)]">Gerade keine Atze eingetragen.</p>
-              )}
+              {playerListEmpty && <p className="text-sm text-[var(--tt-text-muted)]">Gerade keine Atze eingetragen.</p>}
             </div>
           )}
         </TTPanel>
 
-        <LobbyQuoteBox />
+        <TTPanel className="p-0" bodyClassName="p-0">
+          <LobbyQuoteBox />
+        </TTPanel>
 
-        <ResumeGameCallout
-          session={session}
-          requireExplicitResume
-          isConfirmed={resumeConfirmed}
-          lobbyExists={session ? lobbies.some((l) => l.id === session.lobbyId) : false}
-        />
+        <TTPanelCollapsible
+          title="ADMIN SHIT"
+          eyebrow=">> Lobby-Kommando 24"
+          variant="danger"
+          initialExpanded={false}
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--tt-text-muted)]">
+              {isRejoinMode
+                ? "Rejoin ready: gleicher Name + Lobby holen deinen letzten Stand zurück."
+                : "Starte eine neue Runde oder spring mit Name + Lobby jederzeit hinein."}
+            </p>
+            <div className="tt-text text-xs font-black uppercase tracking-[0.3em] text-[var(--tt-text-muted)]">
+              {String(lobbies.length).padStart(2, "0")} Lobbys · {String(activePlayerCount).padStart(2, "0")}/08 aktiv
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TTButton variant="ghost" onClick={handleLogout} className="w-full justify-center">
+                Logout
+              </TTButton>
+              <TTButton as={Link} to="/leaderboard" variant="secondary" className="w-full justify-center">
+                Rangliste
+              </TTButton>
+            </div>
+          </div>
+        </TTPanelCollapsible>
 
-        <div className="grid gap-6">
-          <TTPanel title="Gib Lobby" eyebrow=">> Neue Lobby" variant="cyan">
+        <TTPanelCollapsible
+          title="Gib Lobby"
+          eyebrow=">> Neue Lobby 67"
+          variant="cyan"
+          initialExpanded={false}
+        >
+          <div className="space-y-4">
             <LobbyDropdown
               value={lobbyName}
               onChange={setLobbyName}
               options={lobbyOptions}
               maxLen={MAX_LOBBY_NAME}
               error={errLobby}
-              placeholder="Breites Becken 24"
+              placeholder="Breites Becken"
               disabled={isRejoinMode}
             />
 
-            <div className="mt-2 space-y-1 text-xs uppercase tracking-[0.2em] text-[var(--tt-text-muted)]">
+            <div className="space-y-1 text-xs uppercase tracking-[0.2em] text-[var(--tt-text-muted)]">
               {loading && <p role="status">Hole die Lobbys rein …</p>}
               {errorLoad && <p className="text-[var(--tt-danger)]">Ups, Fehlermeldung: {errorLoad}</p>}
             </div>
-          </TTPanel>
 
-          {isRejoinMode ? (
-            <div className="grid gap-4">
-              <TTButton
-                variant="danger"
-                onClick={joinLobby}
-                busy={joiningLobby}
-                disabled={!canJoin}
-                className="w-full justify-center"
-              >
-                Beitreten
-              </TTButton>
-            </div>
-          ) : (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2">
+            {isRejoinMode ? (
+              <div className="grid gap-3">
+                <TTButton
+                  variant="danger"
+                  onClick={joinLobby}
+                  busy={joiningLobby}
+                  disabled={!canJoin}
+                  className={clsx(
+                    "w-full justify-center",
+                    !canJoin && "line-through decoration-2 decoration-[var(--tt-danger)] opacity-100"
+                  )}
+                >
+                  Beitreten
+                </TTButton>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
                 <TTButton
                   variant="success"
                   onClick={createLobby}
                   busy={busyCreate}
                   disabled={!canCreate}
-                  className="w-full justify-center"
+                  className={clsx(
+                    "w-full justify-center",
+                    !canCreate && "line-through decoration-2 decoration-[var(--tt-danger)] opacity-100"
+                  )}
                 >
                   Lobby eröffnen
                 </TTButton>
@@ -510,29 +506,41 @@ export default function HomePage() {
                   onClick={joinLobby}
                   busy={joiningLobby}
                   disabled={!canJoin}
-                  className="w-full justify-center"
+                  className={clsx(
+                    "w-full justify-center",
+                    !canJoin && "line-through decoration-2 decoration-[var(--tt-danger)] opacity-100"
+                  )}
                 >
                   Beitreten
                 </TTButton>
               </div>
-            </>
-          )}
+            )}
 
-          {msg && (
-            <p className="tt-text text-sm font-black text-[var(--tt-success)]" aria-live="polite" data-testid="home-status">
-              {msg}
-            </p>
-          )}
-          {errPlayer && (
-            <p className="tt-text text-sm font-black text-[var(--tt-danger)]" aria-live="assertive">
-              {errPlayer}
-            </p>
-          )}
-        </div>
+            {msg && (
+              <p className="tt-text text-sm font-black text-[var(--tt-success)]" aria-live="polite" data-testid="home-status">
+                {msg}
+              </p>
+            )}
+            {errPlayer && (
+              <p className="tt-text text-sm font-black text-[var(--tt-danger)]" aria-live="assertive">
+                {errPlayer}
+              </p>
+            )}
+          </div>
+        </TTPanelCollapsible>
+
+        <ResumeGameCallout
+          session={session}
+          requireExplicitResume
+          isConfirmed={resumeConfirmed}
+          lobbyExists={session ? lobbies.some((l) => l.id === session.lobbyId) : false}
+          className="w-full"
+        />
       </div>
     </RootLayout>
   );
 }
+
 
 /** Normalisiert Strings für Vergleichs- und Lookup-Operationen. */
 function normalize(v: string) {

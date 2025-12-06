@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import TTButton from "./ui/TTButton";
 import { loadSession, type LobbySession } from "../../utils/session";
-import { losePath, roundPath, withSearch } from "../../utils/paths";
+import { losePath, roundPath, winPath, withSearch } from "../../utils/paths";
 
 type ResumeGameCalloutProps = {
   session?: LobbySession | null;
@@ -57,6 +57,13 @@ export default function ResumeGameCallout({
       });
       return withSearch(loseTarget, sharedSearch);
     }
+    if (resumeSession.resumeView === "win") {
+      const winTarget = winPath({
+        lobbyName: resumeSession.lobbyName,
+        lobbyId: resumeSession.lobbyId,
+      });
+      return withSearch(winTarget, sharedSearch);
+    }
     const base = roundPath({
       lobbyName: resumeSession.lobbyName,
       lobbyId: resumeSession.lobbyId,
@@ -76,13 +83,13 @@ export default function ResumeGameCallout({
   return (
     <div
       className={clsx(
-        "tt-card border-[var(--tt-secondary)] bg-[var(--tt-card)]/80 p-4 text-white shadow-lg",
+        "tt-card border-[var(--tt-secondary)] bg-[var(--tt-card)]/80 text-white shadow-lg",
         "focus-within:ring-2 focus-within:ring-[var(--tt-secondary)] focus-within:ring-offset-2 focus-within:ring-offset-slate-900",
         className
       )}
       aria-live="polite"
     >
-      <p className="text-sm font-black uppercase tracking-[0.2em]">Du hast eine laufende Runde.</p>
+      <p className="text-left text-sm font-black uppercase tracking-[0.2em]">Du hast eine laufende Runde.</p>
       <TTButton
         type="button"
         variant="danger"

@@ -3,7 +3,7 @@
  * Zeigt animierte Bubbles über blauem Raster, reagiert auf reduce-motion und bietet einen Button zum Lose-Screen.
  */
 import clsx from "clsx";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import bubbles from "../../assets/ui/bubbles.png";
 import bgTile from "../../assets/ui/bg_tile_blue.png";
 
@@ -15,93 +15,117 @@ export default function SchwimmstBanner({
   className?: string;
   onBubblesClick?: () => void;
 }) {
-  const prefersReducedMotion = useMemo(
-    () => (typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false),
-    []
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(
+    () => (typeof window !== "undefined" ? window.matchMedia("(max-width: 520px)").matches : false)
   );
-  const bubbleCount = prefersReducedMotion ? 32 : 84;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handle = () => setPrefersReducedMotion(media.matches);
+    handle();
+    media.addEventListener("change", handle);
+    return () => media.removeEventListener("change", handle);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(max-width: 520px)");
+    const handle = () => setIsNarrow(media.matches);
+    handle();
+    media.addEventListener("change", handle);
+    return () => media.removeEventListener("change", handle);
+  }, []);
+
+  const bubbleCount = prefersReducedMotion ? 40 : isNarrow ? 80 : 96;
+  const shouldAnimateBubbles = !prefersReducedMotion;
   const bubblesConfig = useMemo(() => {
     const n = bubbleCount;
     const arr = [];
     for (let i = 0; i < n; i++) {
-      const size = randInt(32, 150);
+      const size = randInt(isNarrow ? 26 : 32, isNarrow ? 120 : 150);
       const left = randInt(4, 96);     // %
       const top = randInt(4, 96);      // %
       const rot = randInt(-25, 25);
-      const pulse = Math.random() < 0.85;
-      const duration = randFloat(1.6, 4.6);
-      const delay = randFloat(0, 3);
+      const pulse = true;
+      const duration = randFloat(isNarrow ? 2.6 : 2.2, isNarrow ? 5.6 : 5.2);
+      const delay = randFloat(0, isNarrow ? 1.4 : 1.2);
       const opacity = randFloat(0.3, 0.95);
       arr.push({ size, left, top, rot, pulse, duration, delay, opacity });
     }
     return arr;
-  }, [bubbleCount, prefersReducedMotion]);
+  }, [bubbleCount, isNarrow]);
 
   return (
     <div className={clsx("relative w-full flex flex-col items-center", className)}>
-      {/* Bubbles-Zone */}
-      <div
-        className="relative w-full h-44 sm:h-52 overflow-hidden border-4 border-[var(--tt-info)] bg-black"
-        style={{
-          backgroundImage: `url(${bgTile})`,
-          backgroundRepeat: "repeat",
-          backgroundSize: "auto",
-        }}
-      >
-        {/* Klick-Overlay */}
-        <button
-          type="button"
-          aria-label="Zum Wartebildschirm wechseln"
-          onClick={onBubblesClick}
-          className="absolute inset-0 z-10 cursor-pointer bg-transparent"
-          style={{ WebkitTapHighlightColor: "transparent" }}
-        />
-        {bubblesConfig.map((b, i) => (
-          <img
-            key={i}
-            src={bubbles}
-            alt=""
-            className="absolute select-none pointer-events-none"
-            style={{
-              left: `${b.left}%`,
-              top: `${b.top}%`,
-              width: `${b.size}px`,
-              transform: `translate(-50%, -50%) rotate(${b.rot}deg)`,
-              opacity: b.opacity,
-              filter: "drop-shadow(0 8px 0 rgba(0,0,0,0.9))",
-              animation:
-                !prefersReducedMotion && b.pulse
-                  ? `schw-bubble-pulse ${b.duration}s ease-in-out ${b.delay}s infinite`
-                  : "none",
-            }}
-            draggable={false}
+      <div className="w-full space-y-4 sm:space-y-5">
+        {/* Bubbles-Zone */}
+        <div
+          className="relative w-full h-44 sm:h-56 overflow-hidden border-4 border-[var(--tt-info)] bg-black"
+          style={{
+            backgroundImage: `url(${bgTile})`,
+            backgroundRepeat: "repeat",
+            backgroundSize: "auto",
+          }}
+        >
+          {/* Klick-Overlay */}
+          <button
+            type="button"
+            aria-label="Zum Wartebildschirm wechseln"
+            onClick={onBubblesClick}
+            className="absolute inset-0 z-10 cursor-pointer bg-transparent"
+            style={{ WebkitTapHighlightColor: "transparent" }}
           />
-        ))}
-      </div>
+          {bubblesConfig.map((b, i) => (
+            <img
+              key={i}
+              src={bubbles}
+              alt=""
+              className="absolute select-none pointer-events-none tt-bubble-wobble"
+              style={{
+                left: `${b.left}%`,
+                top: `${b.top}%`,
+                width: `${b.size}px`,
+                transform: "translate(-50%, -50%) rotate(var(--schw-rot, 0deg))",
+                opacity: b.opacity,
+                filter: "drop-shadow(0 8px 0 rgba(0,0,0,0.9))",
+                ["--schw-rot" as string]: `${b.rot}deg`,
+                ["--schw-scale-min" as string]: isNarrow ? "0.88" : "0.94",
+                ["--schw-scale-max" as string]: isNarrow ? "1.08" : "1.16",
+                ["--schw-wobble-duration" as string]: shouldAnimateBubbles && b.pulse ? `${b.duration}s` : "0s",
+                ["--schw-wobble-delay" as string]: shouldAnimateBubbles && b.pulse ? `${b.delay}s` : "0s",
+                animationName: shouldAnimateBubbles && b.pulse ? "tt-bubble-wobble" : "none",
+                animationTimingFunction: "steps(3, end)",
+                animationIterationCount: "infinite",
+                animationDirection: "alternate",
+              }}
+              draggable={false}
+            />
+          ))}
+        </div>
 
-      {/* SCHWIMMST-Schriftzug */}
-      <div className="mt-6 flex gap-1 whitespace-nowrap select-none">
-        {"SCHWIMMST".split("").map((ch, i) => (
-          <span
-            key={i}
-            className="
-              bg-white text-black border-4 border-black shadow-[0_4px_0_#111]
-              px-3 py-2 text-3xl sm:text-4xl font-extrabold leading-none
-              rounded-[2px]
-            "
-          >
-            {ch}
-          </span>
-        ))}
+        {/* SCHWIMMST-Schriftzug */}
+        <div className="w-full mt-4 sm:mt-5">
+          <div className="grid w-full grid-cols-9 gap-0 select-none">
+            {"SCHWIMMST".split("").map((ch, i) => (
+              <span
+                key={i}
+                className="
+                  inline-flex items-center justify-center w-full h-full
+                  bg-white text-black border-[3px] border-black shadow-[0_3px_0_#111] rounded-[1px]
+                  min-w-[1.4rem] min-h-[1.85rem] sm:min-w-[1.65rem] sm:min-h-[2.05rem]
+                  px-0.5 sm:px-0.5 py-0.5 sm:py-1.1
+                  tt-text font-extrabold uppercase leading-[0.88] tracking-[0.005em]
+                  text-[clamp(1.28rem,6vw,1.96rem)] sm:text-[clamp(1.44rem,3.8vw,2.14rem)]
+                "
+              >
+                {ch}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
-
-      <style>{`
-        @keyframes schw-bubble-pulse {
-          0%   { transform: translate(-50%, -50%) scale(1);   opacity: 0.55; }
-          50%  { transform: translate(-50%, -58%) scale(1.45); opacity: 1; }
-          100% { transform: translate(-50%, -50%) scale(1);   opacity: 0.55; }
-        }
-      `}</style>
     </div>
   );
 }
